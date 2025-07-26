@@ -5,6 +5,8 @@ import { ClearbitClient } from './dataSourceClients/clearbitClient';
 import { LinkedInClient } from './dataSourceClients/linkedInClient';
 import { aiService } from './aiService';
 import crypto from 'crypto';
+import { db } from '../db';
+import { prospectSearches, discoveredProspects } from '@shared/schema';
 
 export interface SearchCriteria {
   keywords?: string;
@@ -68,7 +70,7 @@ export class ProspectDiscoveryService {
     );
   }
 
-  async searchProspects(searchCriteria: SearchCriteria): Promise<{
+  async searchProspects(searchCriteria: SearchCriteria, userId?: string): Promise<{
     success: boolean;
     totalResults: number;
     prospects: UnifiedProspect[];
@@ -128,6 +130,47 @@ export class ProspectDiscoveryService {
       const limit = searchCriteria.limit || 50;
       const startIndex = (page - 1) * limit;
       const paginatedProspects = filteredProspects.slice(startIndex, startIndex + limit);
+
+      // Save search history and discovered prospects if userId is provided
+      if (userId && paginatedProspects.length > 0) {
+        try {
+          // Save search history
+          const [searchRecord] = await db.insert(prospectSearches).values({
+            userId,
+            searchQuery: searchCriteria as any,
+            resultsCount: filteredProspects.length,
+            aiInsights: {
+              dataSourcesUsed: Object.values(this.dataSources).filter(client => client !== undefined).length,
+              averageConfidence: this.calculateAverageConfidence(paginatedProspects),
+              topIndustries: this.extractTopIndustries(paginatedProspects),
+            }
+          }).returning();
+
+          // Save discovered prospects
+          if (searchRecord) {
+            const prospectsToSave = paginatedProspects.map(prospect => ({
+              searchId: searchRecord.id,
+              name: prospect.name,
+              email: prospect.email || null,
+              company: prospect.company || null,
+              title: prospect.title || null,
+              industry: prospect.industry || null,
+              location: prospect.location || null,
+              phone: prospect.phone || null,
+              linkedinUrl: prospect.linkedinUrl || null,
+              aiScore: prospect.aiScore?.toString() || null,
+              confidenceScore: prospect.dataQuality.toString(),
+              dataSources: prospect.sources,
+              intentSignals: prospect.intentSignals ? prospect.intentSignals as any : null,
+            }));
+
+            await db.insert(discoveredProspects).values(prospectsToSave);
+          }
+        } catch (error) {
+          console.error('Error saving search history:', error);
+          // Continue even if saving fails
+        }
+      }
 
       return {
         success: true,
