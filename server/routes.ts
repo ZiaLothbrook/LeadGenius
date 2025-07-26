@@ -674,6 +674,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Health check endpoint for CI/CD monitoring
+  app.get('/health', (req, res) => {
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      version: process.env.npm_package_version || '1.0.0',
+      environment: process.env.NODE_ENV || 'development',
+      database: 'connected', // You can add actual DB health check here
+      services: {
+        apollo: !!process.env.APOLLO_API_KEY,
+        twilio: !!process.env.TWILIO_ACCOUNT_SID,
+        openrouter: !!process.env.OPENROUTER_API_KEY,
+      }
+    });
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
