@@ -16,11 +16,11 @@ export default function Landing() {
               <span className="text-xl font-semibold text-slate-900">LeadGen AI</span>
             </div>
             <Button 
-              onClick={() => window.location.href = '/api/login'} 
+              onClick={() => window.location.href = '/login'} 
               className="btn-primary"
               data-testid="button-login"
             >
-              Get Started
+              Sign In
             </Button>
           </div>
         </div>
@@ -39,7 +39,7 @@ export default function Landing() {
           </p>
           <Button 
             size="lg" 
-            onClick={() => window.location.href = '/api/login'}
+            onClick={() => window.location.href = '/login'}
             className="btn-primary text-lg px-8 py-3"
             data-testid="button-hero-cta"
           >
@@ -143,7 +143,7 @@ export default function Landing() {
           <Button 
             size="lg" 
             variant="secondary"
-            onClick={() => window.location.href = '/api/login'}
+            onClick={() => window.location.href = '/login'}
             className="text-lg px-8 py-3"
             data-testid="button-cta-bottom"
           >

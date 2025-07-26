@@ -109,7 +109,14 @@ export default function Sidebar() {
           variant="outline"
           size="sm"
           className="w-full"
-          onClick={() => window.location.href = '/api/logout'}
+          onClick={async () => {
+            try {
+              await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+              window.location.href = '/login';
+            } catch (error) {
+              console.error('Logout failed:', error);
+            }
+          }}
           data-testid="button-logout"
         >
           <LogOut className="w-4 h-4 mr-2" />
