@@ -42,9 +42,7 @@ export default function Discovery() {
   const { data: searchResults, isLoading, refetch } = useQuery({
     queryKey: ["/api/prospects/search", searchFilters],
     queryFn: async () => {
-      return apiRequest('/api/prospects/search', {
-        method: 'POST',
-        body: {
+      const response = await apiRequest('POST', '/api/prospects/search', {
           keywords: searchFilters.search || undefined,
           industry: searchFilters.industry !== "all" ? searchFilters.industry : undefined,
           companySize: searchFilters.companySize !== "all" ? searchFilters.companySize : undefined,
@@ -53,8 +51,8 @@ export default function Discovery() {
           technologies: searchFilters.technologies ? searchFilters.technologies.split(',').map(t => t.trim()) : undefined,
           page: 1,
           limit: 50,
-        },
       });
+      return response.json();
     },
     retry: false,
   });
@@ -64,10 +62,8 @@ export default function Discovery() {
 
   const createProspectMutation = useMutation({
     mutationFn: async (prospectData: any) => {
-      return apiRequest("/api/prospects", {
-        method: "POST",
-        body: prospectData,
-      });
+      const response = await apiRequest("POST", "/api/prospects", prospectData);
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/prospects"] });
