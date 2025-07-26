@@ -58,6 +58,16 @@ export async function setupLocalAuth(app: Express) {
       });
     })(req, res, next);
   });
+  
+  // Add local logout route
+  app.post('/api/auth/logout', (req, res) => {
+    req.logout((err) => {
+      if (err) {
+        return res.status(500).json({ message: 'Logout failed' });
+      }
+      res.json({ success: true });
+    });
+  });
 }
 
 // Function to create admin user
