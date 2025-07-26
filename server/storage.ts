@@ -96,25 +96,27 @@ export class DatabaseStorage implements IStorage {
 
   // Prospect operations
   async getProspects(userId: string, filters?: any): Promise<Prospect[]> {
-    let query = db.select().from(prospects).where(eq(prospects.userId, userId));
+    let conditions = [eq(prospects.userId, userId)];
     
     if (filters?.search) {
-      query = query.where(
+      conditions.push(
         sql`${prospects.name} ILIKE ${`%${filters.search}%`} OR 
             ${prospects.company} ILIKE ${`%${filters.search}%`} OR 
             ${prospects.email} ILIKE ${`%${filters.search}%`}`
       );
     }
     
-    if (filters?.industry) {
-      query = query.where(eq(prospects.industry, filters.industry));
+    if (filters?.industry && filters.industry !== 'all') {
+      conditions.push(eq(prospects.industry, filters.industry));
     }
     
     if (filters?.location) {
-      query = query.where(sql`${prospects.location} ILIKE ${`%${filters.location}%`}`);
+      conditions.push(sql`${prospects.location} ILIKE ${`%${filters.location}%`}`);
     }
     
-    return await query.orderBy(desc(prospects.createdAt));
+    return await db.select().from(prospects)
+      .where(and(...conditions))
+      .orderBy(desc(prospects.createdAt));
   }
 
   async getProspect(id: string): Promise<Prospect | undefined> {
@@ -232,22 +234,22 @@ export class DatabaseStorage implements IStorage {
 
   // Analytics operations
   async getAnalytics(userId: string, filters?: any): Promise<Analytics[]> {
-    let query = db.select().from(analytics).where(eq(analytics.userId, userId));
+    let conditions = [eq(analytics.userId, userId)];
     
     if (filters?.campaignId) {
-      query = query.where(eq(analytics.campaignId, filters.campaignId));
+      conditions.push(eq(analytics.campaignId, filters.campaignId));
     }
     
     if (filters?.startDate && filters?.endDate) {
-      query = query.where(
-        and(
-          sql`${analytics.date} >= ${filters.startDate}`,
-          sql`${analytics.date} <= ${filters.endDate}`
-        )
+      conditions.push(
+        sql`${analytics.date} >= ${filters.startDate}`,
+        sql`${analytics.date} <= ${filters.endDate}`
       );
     }
     
-    return await query.orderBy(desc(analytics.date));
+    return await db.select().from(analytics)
+      .where(and(...conditions))
+      .orderBy(desc(analytics.date));
   }
 
   async createAnalytics(analyticsData: InsertAnalytics): Promise<Analytics> {
@@ -308,4 +310,125 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
+// Create admin user function for storage initialization
+const createAdminUser = async () => {
+  try {
+    const storage = new DatabaseStorage();
+    const existingUser = await storage.getUserByUsername("admin");
+    if (!existingUser) {
+      await storage.createUser({
+        username: "admin",
+        password: "password", 
+        email: "admin@company.com",
+        firstName: "Admin",
+        lastName: "User",
+      });
+      console.log("Admin user created successfully");
+      
+      // Add sample prospects for demo
+      await createSampleProspects(storage);
+    } else {
+      console.log("Admin user already exists");
+    }
+  } catch (error) {
+    console.error("Error creating admin user:", error);
+  }
+};
+
+// Create sample prospects for demo
+const createSampleProspects = async (storage: DatabaseStorage) => {
+  const adminUser = await storage.getUserByUsername("admin");
+  if (!adminUser) return;
+
+  const sampleProspects = [
+    {
+      userId: adminUser.id,
+      name: "Sarah Johnson",
+      email: "sarah.johnson@techstart.com",
+      company: "TechStart Inc",
+      title: "VP of Sales",
+      industry: "technology",
+      location: "San Francisco, CA",
+      phone: "+1 (555) 123-4567",
+      linkedinUrl: "https://linkedin.com/in/sarahjohnson",
+      companySize: "51-200",
+      score: 85,
+      verified: true,
+      dataQuality: 95,
+    },
+    {
+      userId: adminUser.id,
+      name: "Michael Chen",
+      email: "m.chen@healthtech.com",
+      company: "HealthTech Solutions",
+      title: "CEO",
+      industry: "healthcare",
+      location: "Boston, MA",
+      phone: "+1 (555) 987-6543",
+      linkedinUrl: "https://linkedin.com/in/michaelchen",
+      companySize: "11-50",
+      score: 92,
+      verified: true,
+      dataQuality: 88,
+    },
+    {
+      userId: adminUser.id,
+      name: "Emily Rodriguez",
+      email: "emily.r@finnovate.com",
+      company: "Finnovate Corp",
+      title: "Director of Marketing",
+      industry: "finance",
+      location: "New York, NY",
+      phone: "+1 (555) 456-7890",
+      linkedinUrl: "https://linkedin.com/in/emilyrodriguez",
+      companySize: "200+",
+      score: 78,
+      verified: false,
+      dataQuality: 82,
+    },
+    {
+      userId: adminUser.id,
+      name: "David Kim",
+      email: "david.kim@manufact.com",
+      company: "Manufacturing Plus",
+      title: "Operations Manager",
+      industry: "manufacturing",
+      location: "Detroit, MI",
+      phone: "+1 (555) 321-0987",
+      linkedinUrl: "https://linkedin.com/in/davidkim",
+      companySize: "51-200",
+      score: 67,
+      verified: true,
+      dataQuality: 75,
+    },
+    {
+      userId: adminUser.id,
+      name: "Lisa Wang",
+      email: "lisa.wang@techcorp.com",
+      company: "TechCorp Industries",
+      title: "CTO",
+      industry: "technology",
+      location: "Seattle, WA",
+      phone: "+1 (555) 111-2222",
+      linkedinUrl: "https://linkedin.com/in/lisawang",
+      companySize: "200+",
+      score: 94,
+      verified: true,
+      dataQuality: 96,
+    }
+  ];
+
+  try {
+    for (const prospect of sampleProspects) {
+      await storage.createProspect(prospect);
+    }
+    console.log("Sample prospects created successfully");
+  } catch (error) {
+    console.log("Sample prospects already exist or error creating them");
+  }
+};
+
 export const storage = new DatabaseStorage();
+
+// Initialize admin user and sample data
+createAdminUser();

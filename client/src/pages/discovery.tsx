@@ -27,8 +27,8 @@ export default function Discovery() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [searchFilters, setSearchFilters] = useState({
     search: "",
-    industry: "",
-    companySize: "",
+    industry: "all",
+    companySize: "all",
     jobTitle: "",
     location: "",
     technologies: "",
@@ -38,7 +38,7 @@ export default function Discovery() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: prospects, isLoading, refetch } = useQuery({
+  const { data: prospects = [], isLoading, refetch } = useQuery({
     queryKey: ["/api/prospects", searchFilters],
     retry: false,
   });
@@ -87,10 +87,10 @@ export default function Discovery() {
   };
 
   const handleSelectAll = () => {
-    if (selectedProspects.length === prospects?.length) {
+    if (selectedProspects.length === prospects.length) {
       setSelectedProspects([]);
     } else {
-      setSelectedProspects(prospects?.map((p: any) => p.id) || []);
+      setSelectedProspects(prospects.map((p: any) => p.id));
     }
   };
 
@@ -152,7 +152,7 @@ export default function Discovery() {
                   <SelectValue placeholder="All Industries" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Industries</SelectItem>
+                  <SelectItem value="all">All Industries</SelectItem>
                   <SelectItem value="technology">Technology</SelectItem>
                   <SelectItem value="healthcare">Healthcare</SelectItem>
                   <SelectItem value="finance">Finance</SelectItem>
@@ -171,7 +171,7 @@ export default function Discovery() {
                   <SelectValue placeholder="All Sizes" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Sizes</SelectItem>
+                  <SelectItem value="all">All Sizes</SelectItem>
                   <SelectItem value="1-10">1-10 employees</SelectItem>
                   <SelectItem value="11-50">11-50 employees</SelectItem>
                   <SelectItem value="51-200">51-200 employees</SelectItem>
@@ -252,7 +252,7 @@ export default function Discovery() {
               </Button>
             </div>
             <div className="text-sm text-slate-500">
-              Estimated results: <span className="font-medium text-slate-900">{prospects?.length || 0} prospects</span>
+              Estimated results: <span className="font-medium text-slate-900">{prospects.length} prospects</span>
             </div>
           </div>
         </CardContent>
@@ -265,7 +265,7 @@ export default function Discovery() {
             <h3 className="text-lg font-semibold text-slate-900">Search Results</h3>
             <div className="flex items-center space-x-3">
               <span className="text-sm text-slate-500">
-                Showing {prospects?.length || 0} results
+                Showing {prospects.length} results
               </span>
               <Button variant="secondary" data-testid="button-export-results">
                 <Download className="w-4 h-4 mr-2" />
@@ -284,7 +284,7 @@ export default function Discovery() {
                 <tr>
                   <th className="table-header">
                     <Checkbox
-                      checked={selectedProspects.length === prospects?.length && prospects?.length > 0}
+                      checked={selectedProspects.length === prospects.length && prospects.length > 0}
                       onCheckedChange={handleSelectAll}
                       data-testid="checkbox-select-all"
                     />
@@ -298,7 +298,7 @@ export default function Discovery() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {prospects?.length > 0 ? (
+                {prospects.length > 0 ? (
                   prospects.map((prospect: any) => (
                     <tr key={prospect.id} className="hover:bg-slate-50">
                       <td className="table-cell">
@@ -386,7 +386,7 @@ export default function Discovery() {
           </div>
 
           {/* Pagination */}
-          {prospects?.length > 0 && (
+          {prospects.length > 0 && (
             <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-slate-600">Show</span>
