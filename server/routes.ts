@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupLocalAuth, createAdminUser } from "./localAuth";
 import { z } from "zod";
 import { generatePersonalizedMessage, enrichProspectData } from "./services/openai";
 import {
@@ -14,11 +15,35 @@ import {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
   await setupAuth(app);
+  await setupLocalAuth(app);
+  
+  // Create admin user on startup
+  await createAdminUser();
+
+  // Custom authentication middleware that handles both Replit and local auth
+  const isAuthenticatedLocal = async (req: any, res: any, next: any) => {
+    if (req.isAuthenticated()) {
+      // Check if it's a local user (has id directly) or Replit user (has claims)
+      if (req.user.id || (req.user.claims && req.user.claims.sub)) {
+        return next();
+      }
+    }
+    res.status(401).json({ message: "Unauthorized" });
+  };
 
   // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  app.get('/api/auth/user', isAuthenticatedLocal, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      let userId: string;
+      // Handle both local auth (user.id) and Replit auth (user.claims.sub)
+      if (req.user.id) {
+        userId = req.user.id;
+      } else if (req.user.claims && req.user.claims.sub) {
+        userId = req.user.claims.sub;
+      } else {
+        return res.status(401).json({ message: "Invalid user session" });
+      }
+      
       const user = await storage.getUser(userId);
       res.json(user);
     } catch (error) {
@@ -28,9 +53,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dashboard stats
-  app.get('/api/dashboard/stats', isAuthenticated, async (req: any, res) => {
+  app.get('/api/dashboard/stats', isAuthenticatedLocal, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id || req.user.claims?.sub;
       const stats = await storage.getDashboardStats(userId);
       res.json(stats);
     } catch (error) {
@@ -40,9 +65,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Prospect routes
-  app.get('/api/prospects', isAuthenticated, async (req: any, res) => {
+  app.get('/api/prospects', isAuthenticatedLocal, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id || req.user.claims?.sub;
       const filters = req.query;
       const prospects = await storage.getProspects(userId, filters);
       res.json(prospects);
@@ -52,7 +77,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/prospects/:id', isAuthenticated, async (req: any, res) => {
+  app.get('/api/prospects/:id', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const prospect = await storage.getProspect(req.params.id);
       if (!prospect) {
@@ -65,7 +90,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/prospects', isAuthenticated, async (req: any, res) => {
+  app.post('/api/prospects', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const prospectData = insertProspectSchema.parse({ ...req.body, userId });
@@ -77,7 +102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/prospects/:id', isAuthenticated, async (req: any, res) => {
+  app.put('/api/prospects/:id', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const prospect = await storage.updateProspect(req.params.id, req.body);
       res.json(prospect);
@@ -87,7 +112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/prospects/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/prospects/:id', isAuthenticatedLocal, async (req: any, res) => {
     try {
       await storage.deleteProspect(req.params.id);
       res.json({ message: "Prospect deleted successfully" });
@@ -98,7 +123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Enrich prospect data
-  app.post('/api/prospects/:id/enrich', isAuthenticated, async (req: any, res) => {
+  app.post('/api/prospects/:id/enrich', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const prospect = await storage.getProspect(req.params.id);
       if (!prospect) {
@@ -120,7 +145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Campaign routes
-  app.get('/api/campaigns', isAuthenticated, async (req: any, res) => {
+  app.get('/api/campaigns', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const campaigns = await storage.getCampaigns(userId);
@@ -131,7 +156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/campaigns/:id', isAuthenticated, async (req: any, res) => {
+  app.get('/api/campaigns/:id', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const campaign = await storage.getCampaign(req.params.id);
       if (!campaign) {
@@ -144,7 +169,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/campaigns', isAuthenticated, async (req: any, res) => {
+  app.post('/api/campaigns', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const campaignData = insertCampaignSchema.parse({ ...req.body, userId });
@@ -156,7 +181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/campaigns/:id', isAuthenticated, async (req: any, res) => {
+  app.put('/api/campaigns/:id', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const campaign = await storage.updateCampaign(req.params.id, req.body);
       res.json(campaign);
@@ -166,7 +191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/campaigns/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/campaigns/:id', isAuthenticatedLocal, async (req: any, res) => {
     try {
       await storage.deleteCampaign(req.params.id);
       res.json({ message: "Campaign deleted successfully" });
@@ -177,7 +202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Message routes
-  app.get('/api/messages', isAuthenticated, async (req: any, res) => {
+  app.get('/api/messages', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const messages = await storage.getMessages(userId);
@@ -188,7 +213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/messages', isAuthenticated, async (req: any, res) => {
+  app.post('/api/messages', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const messageData = insertMessageSchema.parse({ ...req.body, userId });
@@ -201,7 +226,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Generate personalized message using AI
-  app.post('/api/messages/generate', isAuthenticated, async (req: any, res) => {
+  app.post('/api/messages/generate', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const { prospectId, campaignGoal, tone, messageType, additionalContext } = req.body;
@@ -244,7 +269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Campaign prospects routes
-  app.get('/api/campaigns/:id/prospects', isAuthenticated, async (req: any, res) => {
+  app.get('/api/campaigns/:id/prospects', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const campaignProspects = await storage.getCampaignProspects(req.params.id);
       res.json(campaignProspects);
@@ -254,7 +279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/campaigns/:id/prospects', isAuthenticated, async (req: any, res) => {
+  app.post('/api/campaigns/:id/prospects', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const { prospectIds } = req.body;
       const campaignId = req.params.id;
@@ -282,7 +307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Analytics routes
-  app.get('/api/analytics', isAuthenticated, async (req: any, res) => {
+  app.get('/api/analytics', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const filters = req.query;
