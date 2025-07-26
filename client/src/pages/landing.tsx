@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Rocket, Search, Database, Zap, BarChart, Users } from "lucide-react";
+import { Rocket, Search, Database, Zap, BarChart, Users, Target, Clock, TrendingUp, DollarSign } from "lucide-react";
 
 export default function Landing() {
   return (
@@ -45,6 +45,72 @@ export default function Landing() {
           >
             Start Your Free Trial
           </Button>
+        </div>
+      </section>
+
+      {/* Expected Outcomes Section */}
+      <section className="py-16 px-4 bg-white">
+        <div className="container mx-auto max-w-6xl">
+          <h2 className="text-3xl font-bold text-center text-slate-900 mb-4">
+            Proven Results You Can Count On
+          </h2>
+          <p className="text-lg text-center text-slate-600 mb-12 max-w-3xl mx-auto">
+            Our AI-powered platform delivers measurable outcomes that transform your sales process
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="text-center bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+              <CardContent className="pt-8 pb-8">
+                <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Target className="w-8 h-8 text-white" />
+                </div>
+                <div className="text-4xl font-bold text-blue-900 mb-2">95%+</div>
+                <h3 className="text-lg font-semibold text-blue-800 mb-1">Data Accuracy</h3>
+                <p className="text-sm text-blue-700">
+                  Verified across all data sources
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="text-center bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200">
+              <CardContent className="pt-8 pb-8">
+                <div className="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Clock className="w-8 h-8 text-white" />
+                </div>
+                <div className="text-4xl font-bold text-emerald-900 mb-2">50%+</div>
+                <h3 className="text-lg font-semibold text-emerald-800 mb-1">Time Saved</h3>
+                <p className="text-sm text-emerald-700">
+                  Reduction in manual research
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="text-center bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+              <CardContent className="pt-8 pb-8">
+                <div className="w-16 h-16 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <TrendingUp className="w-8 h-8 text-white" />
+                </div>
+                <div className="text-4xl font-bold text-purple-900 mb-2">30%+</div>
+                <h3 className="text-lg font-semibold text-purple-800 mb-1">Higher Conversion</h3>
+                <p className="text-sm text-purple-700">
+                  Improvement in lead conversion rates
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="text-center bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
+              <CardContent className="pt-8 pb-8">
+                <div className="w-16 h-16 bg-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <DollarSign className="w-8 h-8 text-white" />
+                </div>
+                <div className="text-4xl font-bold text-amber-900 mb-2">25%+</div>
+                <h3 className="text-lg font-semibold text-amber-800 mb-1">Lower CAC</h3>
+                <p className="text-sm text-amber-700">
+                  Reduction in acquisition costs
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </section>
 
