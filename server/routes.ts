@@ -95,6 +95,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Prospect routes
+  app.post('/api/prospects/search', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { keywords, industry, companySize, location, jobTitles, technologies, page, limit } = req.body;
+      
+      console.log('🔍 Searching prospects:', req.body);
+      
+      const results = await prospectDiscoveryService.searchProspects({
+        query: keywords || '',
+        filters: {
+          industry,
+          companySize,
+          location,
+          jobTitles,
+          technologies
+        },
+        limit: limit || 50
+      });
+      
+      res.json(results);
+    } catch (error: any) {
+      console.error("Error searching prospects:", error);
+      res.status(500).json({ 
+        message: "Failed to search prospects",
+        error: error.message 
+      });
+    }
+  });
+
   app.get('/api/prospects', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const userId = req.user.id || req.user.claims?.sub;
