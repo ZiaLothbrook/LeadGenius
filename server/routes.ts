@@ -6,6 +6,7 @@ import { setupLocalAuth, createAdminUser } from "./localAuth";
 import { z } from "zod";
 import { aiService } from "./services/aiService";
 import { prospectSearchService, searchFiltersSchema } from "./services/prospectSearchService";
+import { dataAggregationService } from "./services/dataAggregationService";
 import {
   insertProspectSchema,
   insertCampaignSchema,
@@ -123,26 +124,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // HIGHEST PRIORITY: Prospect search API
+  // HIGHEST PRIORITY: AI-Powered Intelligent Prospect Search API
   app.post('/api/prospects/search', isAuthenticatedLocal, async (req: any, res) => {
     try {
-      // Validate search filters
-      const filters = searchFiltersSchema.parse(req.body);
+      console.log("🔍 AI-powered prospect search request:", req.body);
       
-      // Perform search using the search service
-      const searchResults = await prospectSearchService.searchProspects(filters);
+      // Transform request to search criteria
+      const searchCriteria = {
+        keywords: req.body.keywords,
+        industry: req.body.industry,
+        companySize: req.body.companySize,
+        location: req.body.location,
+        advancedFilters: {
+          jobTitle: req.body.jobTitles || [],
+          technologies: req.body.technologies || [],
+          recentHiring: true,
+        },
+        aiFeatures: {
+          enableLookalikeModeling: true,
+          predictiveScoring: true,
+          intentSignals: ["hiring", "funding", "technology-adoption"],
+        },
+      };
       
-      res.json(searchResults);
+      // Perform AI-powered intelligent search
+      const searchResults = await dataAggregationService.intelligentSearch(searchCriteria);
+      
+      console.log("✅ Search completed successfully:", {
+        totalResults: searchResults.totalResults,
+        aiInsights: searchResults.aiInsights,
+      });
+      
+      // Transform results to match expected frontend format
+      const response = {
+        prospects: searchResults.prospects,
+        total: searchResults.totalResults,
+        hasMore: searchResults.pagination.hasMore,
+        aiInsights: searchResults.aiInsights,
+      };
+      
+      res.json(response);
     } catch (error) {
-      console.error("Error searching prospects:", error);
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ 
-          message: "Invalid search parameters", 
-          errors: error.errors 
-        });
-      } else {
-        res.status(500).json({ message: "Failed to search prospects" });
-      }
+      console.error("❌ Error in AI-powered search:", error);
+      res.status(500).json({ 
+        message: "Failed to perform intelligent prospect search",
+        error: error.message 
+      });
     }
   });
 

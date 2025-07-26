@@ -60,6 +60,7 @@ export default function Discovery() {
   });
 
   const prospects = searchResults?.prospects || [];
+  const aiInsights = searchResults?.aiInsights;
 
   const createProspectMutation = useMutation({
     mutationFn: async (prospectData: any) => {
@@ -305,11 +306,56 @@ export default function Discovery() {
         </CardContent>
       </Card>
 
+      {/* AI Insights Card */}
+      {aiInsights && (
+        <Card className="mb-6 border-blue-200 bg-blue-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center mb-4">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center mr-3">
+                <Search className="w-4 h-4 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold text-blue-900">AI Search Insights</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+              <div className="bg-white rounded-lg p-4">
+                <div className="text-2xl font-bold text-blue-600">{aiInsights.intentSignalsDetected}</div>
+                <div className="text-sm text-slate-600">Intent Signals</div>
+              </div>
+              <div className="bg-white rounded-lg p-4">
+                <div className="text-2xl font-bold text-green-600">{aiInsights.lookalikeMatches}</div>
+                <div className="text-sm text-slate-600">Lookalike Matches</div>
+              </div>
+              <div className="bg-white rounded-lg p-4">
+                <div className="text-2xl font-bold text-orange-600">{aiInsights.competitiveOpportunities}</div>
+                <div className="text-sm text-slate-600">Competitive Opportunities</div>
+              </div>
+              <div className="bg-white rounded-lg p-4">
+                <div className={`text-2xl font-bold ${
+                  aiInsights.searchQuality === 'high' ? 'text-green-600' : 
+                  aiInsights.searchQuality === 'medium' ? 'text-yellow-600' : 'text-red-600'
+                }`}>
+                  {aiInsights.searchQuality.toUpperCase()}
+                </div>
+                <div className="text-sm text-slate-600">Search Quality</div>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg p-4">
+              <h4 className="font-medium text-slate-900 mb-2">AI Recommendations</h4>
+              <ul className="list-disc list-inside text-sm text-slate-600 space-y-1">
+                {aiInsights.recommendations.map((rec, index) => (
+                  <li key={index}>{rec}</li>
+                ))}
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Results Table */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-slate-900">Search Results</h3>
+            <h3 className="text-lg font-semibold text-slate-900">AI-Powered Search Results</h3>
             <div className="flex items-center space-x-3">
               <span className="text-sm text-slate-500">
                 Showing {prospects.length} of {searchResults?.total || 0} results
@@ -387,9 +433,16 @@ export default function Discovery() {
                         </div>
                       </td>
                       <td className="table-cell">
-                        <span className="text-slate-900" data-testid={`text-prospect-title-${prospect.id}`}>
-                          {prospect.title}
-                        </span>
+                        <div>
+                          <span className="text-slate-900" data-testid={`text-prospect-title-${prospect.id}`}>
+                            {prospect.title}
+                          </span>
+                          {prospect.priorityReason && (
+                            <p className="text-xs text-blue-600 mt-1" title={prospect.priorityReason}>
+                              AI Priority Match
+                            </p>
+                          )}
+                        </div>
                       </td>
                       <td className="table-cell">
                         <span className="text-slate-600" data-testid={`text-prospect-location-${prospect.id}`}>
@@ -400,13 +453,18 @@ export default function Discovery() {
                         <div className="flex items-center space-x-2">
                           <div className="w-12 bg-slate-200 rounded-full h-2">
                             <div 
-                              className={`h-2 rounded-full ${getScoreColor(prospect.score || 0)}`}
-                              style={{ width: `${prospect.score || 0}%` }}
+                              className={`h-2 rounded-full ${getScoreColor(prospect.aiScore || prospect.score || 0)}`}
+                              style={{ width: `${prospect.aiScore || prospect.score || 0}%` }}
                             ></div>
                           </div>
                           <span className="text-sm font-medium text-slate-700" data-testid={`text-prospect-score-${prospect.id}`}>
-                            {prospect.score || 0}
+                            {prospect.aiScore || prospect.score || 0}
                           </span>
+                          {(prospect.intentSignals && prospect.intentSignals.length > 0) && (
+                            <div className="flex">
+                              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Active intent signals"></div>
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="table-cell">
