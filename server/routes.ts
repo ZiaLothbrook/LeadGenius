@@ -172,8 +172,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       };
       
+      // Extract page and limit from request body
+      const page = req.body.page || 1;
+      const limit = req.body.limit || 50;
+      
       // Perform AI-powered intelligent search
-      const searchResults = await dataAggregationService.intelligentSearch(searchCriteria);
+      const searchResults = await dataAggregationService.intelligentSearch(
+        searchCriteria, 
+        page, 
+        limit
+      );
       
       console.log("✅ Search completed successfully:", {
         totalResults: searchResults.totalResults,
