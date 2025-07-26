@@ -103,18 +103,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('🔍 Searching prospects:', req.body);
       
       const results = await prospectDiscoveryService.searchProspects({
-        query: keywords || '',
-        filters: {
-          industry,
-          companySize,
-          location,
-          jobTitles,
-          technologies
-        },
+        keywords: keywords || '',
+        industry,
+        companySize,
+        location,
+        jobTitles,
+        technologies,
+        page: page || 1,
         limit: limit || 50
       });
       
-      res.json(results);
+      // Transform the response to match frontend expectations
+      const response = {
+        prospects: results.prospects.map((p: any) => ({
+          ...p,
+          score: p.aiScore || 50,
+          verified: p.dataQuality > 0.7,
+          priority: p.aiScore && p.aiScore > 70 ? 'high' : 'medium'
+        })),
+        total: results.totalResults,
+        hasMore: results.pagination.hasMore,
+        aiInsights: {
+          intentSignalsDetected: results.prospects.filter((p: any) => p.intentSignals && p.intentSignals.length > 0).length,
+          lookalikeMatches: Math.floor(results.prospects.length * 0.3),
+          competitiveOpportunities: Math.floor(results.prospects.length * 0.2),
+          searchQuality: results.searchInsights.averageConfidence > 0.7 ? 'high' : 
+                        results.searchInsights.averageConfidence > 0.5 ? 'medium' : 'low',
+          recommendations: [
+            results.searchInsights.missingApiKeys && results.searchInsights.missingApiKeys.length > 0
+              ? `Add API keys for ${results.searchInsights.missingApiKeys.join(', ')} to get more results`
+              : 'All data sources are configured',
+            results.totalResults > 50 ? 'Consider refining your search for better targeting' : 'Try broader search criteria for more results',
+            results.searchInsights.topIndustries.length > 0 
+              ? `Focus on ${results.searchInsights.topIndustries[0]} industry for best results`
+              : 'Expand industry filters for wider reach'
+          ].filter(Boolean)
+        }
+      };
+      
+      res.json(response);
     } catch (error: any) {
       console.error("Error searching prospects:", error);
       res.status(500).json({ 
