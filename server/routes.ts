@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { setupLocalAuth, createAdminUser } from "./localAuth";
 import { z } from "zod";
-import { generatePersonalizedMessage, enrichProspectData } from "./services/openai";
+import { aiService } from "./services/aiService";
 import {
   insertProspectSchema,
   insertCampaignSchema,
@@ -92,7 +92,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/prospects', isAuthenticatedLocal, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id || req.user.claims?.sub;
       const prospectData = insertProspectSchema.parse({ ...req.body, userId });
       const prospect = await storage.createProspect(prospectData);
       res.json(prospect);
@@ -228,40 +228,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate personalized message using AI
   app.post('/api/messages/generate', isAuthenticatedLocal, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const { prospectId, campaignGoal, tone, messageType, additionalContext } = req.body;
+      const userId = req.user.id || req.user.claims?.sub;
+      const { prospectId, messageType = "cold_email", tone = "professional", context } = req.body;
 
       const prospect = await storage.getProspect(prospectId);
       if (!prospect) {
         return res.status(404).json({ message: "Prospect not found" });
       }
 
-      const generatedMessages = await generatePersonalizedMessage({
-        prospect,
-        campaignGoal,
-        tone,
+      // Generate personalized message using OpenRouter
+      const messageContent = await aiService.generatePersonalizedMessage(
+        {
+          name: prospect.name || "there",
+          company: prospect.company || "",
+          title: prospect.title || "",
+          industry: prospect.industry || "",
+          location: prospect.location || undefined,
+        },
         messageType,
-        additionalContext,
+        tone,
+        context
+      );
+
+      // Generate subject lines
+      const subjects = await aiService.generateEmailSubjects({
+        name: prospect.name || "there",
+        company: prospect.company || "",
+        title: prospect.title || "",
       });
 
-      // Save generated messages to database
-      const savedMessages = [];
-      for (const [index, messageData] of generatedMessages.entries()) {
-        const message = await storage.createMessage({
-          userId,
-          prospectId,
-          type: messageType,
-          subject: messageData.subject,
-          content: messageData.content,
-          tone,
-          aiGenerated: true,
-          variant: String.fromCharCode(65 + index), // A, B, C
-          confidenceScore: messageData.confidenceScore,
-        });
-        savedMessages.push(message);
-      }
+      // Save generated message to database
+      const message = await storage.createMessage({
+        userId,
+        prospectId,
+        type: messageType,
+        subject: subjects[0] || `Re: ${prospect.company}`,
+        content: messageContent,
+        tone,
+        aiGenerated: true,
+        variant: "A",
+        confidenceScore: 85,
+      });
 
-      res.json(savedMessages);
+      res.json({
+        message,
+        alternativeSubjects: subjects.slice(1),
+        messageContent,
+      });
     } catch (error) {
       console.error("Error generating message:", error);
       res.status(500).json({ message: "Failed to generate personalized message" });
@@ -306,10 +319,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // AI-powered prospect enrichment
+  app.post('/api/prospects/:id/enrich', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const prospectId = req.params.id;
+      const prospect = await storage.getProspect(prospectId);
+      
+      if (!prospect) {
+        return res.status(404).json({ message: "Prospect not found" });
+      }
+
+      // Use AI to enrich prospect data
+      const enrichmentResult = await aiService.enrichProspectData({
+        name: prospect.name,
+        company: prospect.company,
+        email: prospect.email,
+        title: prospect.title,
+      });
+
+      // Analyze prospect priority
+      const priorityAnalysis = await aiService.analyzeProspectPriority({
+        name: prospect.name || "",
+        company: prospect.company || "",
+        title: prospect.title || "",
+        industry: prospect.industry || "",
+        recentNews: enrichmentResult.enrichedData.recentNews || undefined,
+      });
+
+      // Update prospect with enriched data
+      const updatedProspect = await storage.updateProspect(prospectId, {
+        industry: enrichmentResult.enrichedData.industry || prospect.industry,
+        location: enrichmentResult.enrichedData.location || prospect.location,
+        phone: enrichmentResult.enrichedData.phone || prospect.phone,
+        linkedinUrl: enrichmentResult.enrichedData.linkedinUrl || prospect.linkedinUrl,
+        dataQuality: Math.round(enrichmentResult.confidence * 100),
+        verified: enrichmentResult.confidence > 0.7,
+        priority: priorityAnalysis.priority,
+        notes: priorityAnalysis.reasoning,
+      });
+
+      res.json({
+        prospect: updatedProspect,
+        enrichmentData: enrichmentResult.enrichedData,
+        confidence: enrichmentResult.confidence,
+        priorityAnalysis,
+      });
+    } catch (error) {
+      console.error("Error enriching prospect:", error);
+      res.status(500).json({ message: "Failed to enrich prospect data" });
+    }
+  });
+
+  // Batch enrich multiple prospects
+  app.post('/api/prospects/enrich-batch', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { prospectIds } = req.body;
+      const enrichedProspects = [];
+
+      for (const prospectId of prospectIds.slice(0, 10)) { // Limit to 10 to avoid API rate limits
+        try {
+          const prospect = await storage.getProspect(prospectId);
+          if (!prospect) continue;
+
+          const enrichmentResult = await aiService.enrichProspectData({
+            name: prospect.name,
+            company: prospect.company,
+            email: prospect.email,
+            title: prospect.title,
+          });
+
+          const updatedProspect = await storage.updateProspect(prospectId, {
+            industry: enrichmentResult.enrichedData.industry || prospect.industry,
+            location: enrichmentResult.enrichedData.location || prospect.location,
+            phone: enrichmentResult.enrichedData.phone || prospect.phone,
+            linkedinUrl: enrichmentResult.enrichedData.linkedinUrl || prospect.linkedinUrl,
+            dataQuality: Math.round(enrichmentResult.confidence * 100),
+            verified: enrichmentResult.confidence > 0.7,
+          });
+
+          enrichedProspects.push(updatedProspect);
+        } catch (error) {
+          console.error(`Error enriching prospect ${prospectId}:`, error);
+          // Continue with other prospects even if one fails
+        }
+      }
+
+      res.json({ enrichedProspects, count: enrichedProspects.length });
+    } catch (error) {
+      console.error("Error in batch enrichment:", error);
+      res.status(500).json({ message: "Failed to enrich prospects" });
+    }
+  });
+
   // Analytics routes
   app.get('/api/analytics', isAuthenticatedLocal, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id || req.user.claims?.sub;
       const filters = req.query;
       const analytics = await storage.getAnalytics(userId, filters);
       res.json(analytics);

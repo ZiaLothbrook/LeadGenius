@@ -53,7 +53,7 @@ The application follows a monorepo structure with clear separation between clien
 - **User Management**: Automatic user creation and profile management
 
 ### External Service Integrations
-- **OpenAI API**: For AI-powered message generation and prospect data enrichment
+- **OpenRouter API**: Unified API gateway providing access to Gemini and Anthropic (Claude) models for AI-powered message generation and prospect data enrichment
 - **Neon Database**: Serverless PostgreSQL database with connection pooling
 - **Repl.it Services**: Integration with Repl.it's authentication and hosting platform
 
@@ -70,7 +70,7 @@ The application follows a monorepo structure with clear separation between clien
 ### Core Dependencies
 - **@neondatabase/serverless**: Serverless PostgreSQL client for database connectivity
 - **drizzle-orm**: Type-safe ORM for database operations
-- **openai**: Official OpenAI API client for AI services
+- **OpenRouter API**: Unified access to Gemini and Anthropic models for AI services
 - **express**: Web framework for the API server
 - **react**: Frontend UI library
 - **@tanstack/react-query**: Server state management and caching
@@ -95,7 +95,20 @@ The application is designed for deployment on Repl.it with the following conside
   - Frontend: Vite builds static assets to `dist/public`
   - Backend: esbuild bundles the server code to `dist/index.js`
 - **Database**: Uses Neon serverless PostgreSQL with automatic connection pooling
-- **Environment Variables**: Requires `DATABASE_URL`, `OPENAI_API_KEY`, `SESSION_SECRET`, and Repl.it-specific variables
+- **Environment Variables**: Requires `DATABASE_URL`, `OPENROUTER_API_KEY`, `SESSION_SECRET`, and Repl.it-specific variables
 - **Static Asset Serving**: Express serves built frontend assets in production
+
+## Recent Changes (January 2025)
+
+- **OpenRouter Integration**: Migrated from OpenAI to OpenRouter API for better model diversity
+  - Primary models: Anthropic Claude 3.5 Sonnet for reasoning and message generation
+  - Secondary models: Google Gemini Pro 1.5 for structured data enrichment
+  - Enhanced AI personalization with context-aware message generation
+- **AI-Powered Features**: 
+  - Prospect data enrichment using Gemini AI with confidence scoring
+  - Personalized message generation using Claude AI with multiple tone options
+  - Batch processing for efficient prospect enrichment
+  - Priority analysis and lead scoring capabilities
+- **Frontend Enhancements**: Updated enrichment and personalization pages with real-time AI feedback
 
 The architecture supports both development and production environments with appropriate build processes and optimizations for each.

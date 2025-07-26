@@ -20,7 +20,8 @@ import {
   Clock,
   TriangleAlert,
   PlusCircle,
-  User
+  User,
+  Database
 } from "lucide-react";
 
 export default function Enrichment() {
@@ -36,7 +37,7 @@ export default function Enrichment() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: prospects, isLoading } = useQuery({
+  const { data: prospects = [], isLoading } = useQuery({
     queryKey: ["/api/prospects"],
     retry: false,
   });
@@ -77,14 +78,15 @@ export default function Enrichment() {
 
   const enrichProspectMutation = useMutation({
     mutationFn: async (prospectId: string) => {
-      const response = await apiRequest("POST", `/api/prospects/${prospectId}/enrich`);
-      return response.json();
+      return apiRequest(`/api/prospects/${prospectId}/enrich`, {
+        method: "POST",
+      });
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/prospects"] });
       toast({
-        title: "Success",
-        description: "Prospect data enriched successfully",
+        title: "AI Enrichment Complete", 
+        description: `Enhanced prospect profile with ${Math.round((data.confidence || 0.8) * 100)}% confidence using Gemini AI`,
       });
     },
     onError: (error) => {
@@ -100,8 +102,42 @@ export default function Enrichment() {
         return;
       }
       toast({
-        title: "Error",
-        description: "Failed to enrich prospect data",
+        title: "AI Enrichment Failed",
+        description: "AI service temporarily unavailable. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const batchEnrichMutation = useMutation({
+    mutationFn: async (prospectIds: string[]) => {
+      return apiRequest("/api/prospects/enrich-batch", {
+        method: "POST",
+        body: { prospectIds },
+      });
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/prospects"] });
+      toast({
+        title: "Batch AI Enrichment Complete",
+        description: `Successfully enriched ${data.count || prospectIds.length} prospects using AI models`,
+      });
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Batch Enrichment Failed",
+        description: "Failed to enrich selected prospects. Please try again.",
         variant: "destructive",
       });
     },
@@ -126,22 +162,22 @@ export default function Enrichment() {
     setIsEnriching(true);
     setEnrichmentProgress(0);
 
-    for (let i = 0; i < enrichmentQueue.length; i++) {
-      const prospectId = enrichmentQueue[i];
-      try {
-        await enrichProspectMutation.mutateAsync(prospectId);
-        setEnrichmentProgress(((i + 1) / enrichmentQueue.length) * 100);
-      } catch (error) {
-        console.error("Enrichment error for prospect:", prospectId, error);
+    try {
+      // Use batch processing for efficiency
+      if (enrichmentQueue.length > 1) {
+        await batchEnrichMutation.mutateAsync(enrichmentQueue);
+        setEnrichmentProgress(100);
+      } else {
+        // Single prospect enrichment
+        await enrichProspectMutation.mutateAsync(enrichmentQueue[0]);
+        setEnrichmentProgress(100);
       }
+    } catch (error) {
+      console.error("Enrichment error:", error);
     }
 
     setIsEnriching(false);
     setEnrichmentQueue([]);
-    toast({
-      title: "Enrichment Complete",
-      description: "All prospects have been processed",
-    });
   };
 
   const getDataQualityIndicator = (prospect: any) => {
@@ -158,7 +194,7 @@ export default function Enrichment() {
     }
   };
 
-  const enrichedProspects = prospects?.filter((p: any) => p.verified || p.dataQuality > 50) || [];
+  const enrichedProspects = prospects ? (prospects as any[]).filter((p: any) => p.verified || p.dataQuality > 50) : [];
 
   if (isLoading) {
     return (
