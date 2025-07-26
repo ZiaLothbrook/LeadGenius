@@ -95,12 +95,23 @@ export class ApolloClient {
   }
 
   private mapCompanySize(size?: string): string[] {
+    // Direct mapping for frontend values
+    const directMap: Record<string, string[]> = {
+      '1-10': ['1-10'],
+      '11-50': ['11-50'],
+      '51-200': ['51-200'],
+      '200+': ['201-500', '501-1000', '1001-5000', '5001-10000', '10001+'],
+      'all': [],
+    };
+    
+    // Legacy mapping for backward compatibility
     const sizeMap: Record<string, string[]> = {
       'startup': ['1-10', '11-50'],
       'smb': ['51-200', '201-500'],
       'midmarket': ['501-1000', '1001-5000'],
       'enterprise': ['5001-10000', '10001+'],
     };
-    return size && sizeMap[size] ? sizeMap[size] : [];
+    
+    return directMap[size || ''] || sizeMap[size || ''] || [];
   }
 }
