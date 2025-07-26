@@ -58,8 +58,8 @@ export default function Personalization() {
   });
 
   const generateMessageMutation = useMutation({
-    mutationFn: async (params: any) => {
-      const selectedProspect = prospects?.find((p: any) => p.id === selectedProspectId);
+    mutationFn: async () => {
+      const selectedProspect = (prospects as any[])?.find((p: any) => p.id === selectedProspectId);
       if (!selectedProspect) throw new Error("No prospect selected");
       
       const payload = {
@@ -90,7 +90,7 @@ export default function Personalization() {
         body: payload,
       });
     },
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       setGeneratedMessages([data]);
       setIsGenerating(false);
       if (data.variants && data.variants.length > 0) {
@@ -199,7 +199,7 @@ export default function Personalization() {
                   <SelectValue placeholder="Choose a prospect" />
                 </SelectTrigger>
                 <SelectContent>
-                  {prospects?.map((prospect: any) => (
+                  {(prospects as any[])?.map((prospect: any) => (
                     <SelectItem key={prospect.id} value={prospect.id}>
                       {prospect.name} - {prospect.company}
                     </SelectItem>
@@ -403,7 +403,7 @@ export default function Personalization() {
                     {generatedMessages[0].metadata && (
                       <div className="mb-3">
                         <div className="flex flex-wrap gap-2">
-                          {generatedMessages[0].metadata.personalizationPoints.map((point, idx) => (
+                          {generatedMessages[0].metadata.personalizationPoints.map((point: any, idx: any) => (
                             <Badge key={idx} variant="secondary" className="text-xs">
                               {point}
                             </Badge>
@@ -449,7 +449,7 @@ export default function Personalization() {
                   {generatedMessages[0].variants && generatedMessages[0].variants.length > 0 && (
                     <>
                       <h4 className="font-medium text-slate-900 mb-3">A/B Test Variants</h4>
-                      {generatedMessages[0].variants.map((variant, index) => (
+                      {generatedMessages[0].variants.map((variant: any, index: any) => (
                         <div key={variant.id} className="border border-slate-200 rounded-lg p-4 mb-3">
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center space-x-2">
