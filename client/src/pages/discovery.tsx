@@ -38,20 +38,41 @@ export default function Discovery() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: prospects = [], isLoading, refetch } = useQuery({
-    queryKey: ["/api/prospects", searchFilters],
+  // Use search API instead of general prospects endpoint
+  const { data: searchResults, isLoading, refetch } = useQuery({
+    queryKey: ["/api/prospects/search", searchFilters],
+    queryFn: async () => {
+      return apiRequest('/api/prospects/search', {
+        method: 'POST',
+        body: {
+          keywords: searchFilters.search || undefined,
+          industry: searchFilters.industry !== "all" ? searchFilters.industry : undefined,
+          companySize: searchFilters.companySize !== "all" ? searchFilters.companySize : undefined,
+          location: searchFilters.location || undefined,
+          jobTitles: searchFilters.jobTitle ? [searchFilters.jobTitle] : undefined,
+          technologies: searchFilters.technologies ? searchFilters.technologies.split(',').map(t => t.trim()) : undefined,
+          page: 1,
+          limit: 50,
+        },
+      });
+    },
     retry: false,
   });
 
+  const prospects = searchResults?.prospects || [];
+
   const createProspectMutation = useMutation({
     mutationFn: async (prospectData: any) => {
-      await apiRequest("POST", "/api/prospects", prospectData);
+      return apiRequest("/api/prospects", {
+        method: "POST",
+        body: prospectData,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/prospects"] });
       toast({
-        title: "Success",
-        description: "Prospect added successfully",
+        title: "Prospect Added",
+        description: "Prospect successfully added to your database",
       });
     },
     onError: (error) => {
@@ -73,6 +94,31 @@ export default function Discovery() {
       });
     },
   });
+
+  const handleAddProspect = (prospect: any) => {
+    createProspectMutation.mutate({
+      name: prospect.name,
+      title: prospect.title,
+      company: prospect.company,
+      industry: prospect.industry,
+      location: prospect.location,
+      email: prospect.email,
+      phone: prospect.phone,
+      linkedinUrl: prospect.linkedinUrl,
+      dataQuality: prospect.dataQuality,
+      verified: prospect.verified,
+      priority: prospect.priority,
+      notes: `Discovered via search - Score: ${prospect.score}`,
+    });
+  };
+
+  const handleAddSelectedProspects = () => {
+    const prospectsToAdd = prospects.filter((p: any) => selectedProspects.includes(p.id));
+    prospectsToAdd.forEach((prospect: any) => {
+      handleAddProspect(prospect);
+    });
+    setSelectedProspects([]);
+  };
 
   const handleSearch = () => {
     refetch();
@@ -252,7 +298,8 @@ export default function Discovery() {
               </Button>
             </div>
             <div className="text-sm text-slate-500">
-              Estimated results: <span className="font-medium text-slate-900">{prospects.length} prospects</span>
+              Found: <span className="font-medium text-slate-900">{searchResults?.total || 0} prospects</span>
+              {searchResults?.hasMore && <span className="ml-2 text-blue-600">(more available)</span>}
             </div>
           </div>
         </CardContent>
@@ -265,15 +312,19 @@ export default function Discovery() {
             <h3 className="text-lg font-semibold text-slate-900">Search Results</h3>
             <div className="flex items-center space-x-3">
               <span className="text-sm text-slate-500">
-                Showing {prospects.length} results
+                Showing {prospects.length} of {searchResults?.total || 0} results
               </span>
               <Button variant="secondary" data-testid="button-export-results">
                 <Download className="w-4 h-4 mr-2" />
                 Export
               </Button>
-              <Button disabled={selectedProspects.length === 0} data-testid="button-add-to-campaign">
+              <Button 
+                disabled={selectedProspects.length === 0}
+                onClick={handleAddSelectedProspects}
+                data-testid="button-add-selected"
+              >
                 <Plus className="w-4 h-4 mr-2" />
-                Add to Campaign
+                Add Selected to Database
               </Button>
             </div>
           </div>
@@ -363,7 +414,12 @@ export default function Discovery() {
                           <Button variant="ghost" size="sm" data-testid={`button-view-${prospect.id}`}>
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" data-testid={`button-add-${prospect.id}`}>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleAddProspect(prospect)}
+                            data-testid={`button-add-${prospect.id}`}
+                          >
                             <Plus className="w-4 h-4" />
                           </Button>
                           <Button variant="ghost" size="sm" data-testid={`button-save-${prospect.id}`}>
