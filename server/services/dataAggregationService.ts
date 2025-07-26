@@ -1,4 +1,5 @@
 import { aiService } from "./aiService";
+import { prospectDiscoveryService } from "./prospectDiscoveryService";
 
 export interface ProspectSearchCriteria {
   keywords?: string;
@@ -115,32 +116,74 @@ export class DataAggregationService {
   /**
    * Intelligent prospect search with AI-powered scoring and intent detection
    */
-  async intelligentSearch(criteria: ProspectSearchCriteria): Promise<SearchResponse> {
+  async intelligentSearch(criteria: ProspectSearchCriteria, page: number = 1, limit: number = 20): Promise<SearchResponse> {
     try {
       console.log("🔍 Starting intelligent prospect search...", criteria);
 
-      // Step 1: Generate enhanced prospect data using AI
-      const prospects = await this.generateEnhancedProspects(criteria);
+      // Step 1: Use real API connections to search for prospects
+      const searchResults = await prospectDiscoveryService.searchProspects({
+        keywords: criteria.keywords,
+        industry: criteria.industry,
+        location: criteria.location,
+        jobTitles: criteria.advancedFilters?.jobTitle,
+        companySize: criteria.companySize,
+        technologies: criteria.advancedFilters?.technologies,
+        page,
+        limit,
+      });
+
+      // If no real data is available (missing API keys), fall back to AI-generated data
+      if (searchResults.prospects.length === 0 && searchResults.searchInsights.missingApiKeys?.length) {
+        console.log("⚠️ No API keys configured, using AI-generated prospect data");
+        const prospects = await this.generateEnhancedProspects(criteria);
+        const scoredProspects = await this.applyAIScoring(prospects, criteria);
+        const prospectsWithIntent = await this.detectIntentSignals(scoredProspects);
+        const aiInsights = await this.generateAIInsights(prospectsWithIntent, criteria);
+        
+        return {
+          success: true,
+          totalResults: prospectsWithIntent.length,
+          aiInsights: {
+            ...aiInsights,
+            recommendations: [
+              ...aiInsights.recommendations,
+              `Configure API keys for real data: ${searchResults.searchInsights.missingApiKeys?.join(', ')}`
+            ]
+          },
+          prospects: prospectsWithIntent.slice(0, limit),
+          pagination: {
+            page,
+            limit,
+            hasMore: prospectsWithIntent.length > limit
+          }
+        };
+      }
+
+      // Step 2: Transform real API data to enhanced prospects
+      const enhancedProspects = await this.transformRealDataToEnhancedProspects(searchResults.prospects);
       
-      // Step 2: Apply AI scoring and ranking
-      const scoredProspects = await this.applyAIScoring(prospects, criteria);
+      // Step 3: Apply AI scoring and ranking
+      const scoredProspects = await this.applyAIScoring(enhancedProspects, criteria);
       
-      // Step 3: Detect intent signals
+      // Step 4: Detect intent signals
       const prospectsWithIntent = await this.detectIntentSignals(scoredProspects);
       
-      // Step 4: Generate AI insights
+      // Step 5: Generate AI insights
       const aiInsights = await this.generateAIInsights(prospectsWithIntent, criteria);
       
       return {
         success: true,
-        totalResults: prospectsWithIntent.length,
-        aiInsights,
-        prospects: prospectsWithIntent.slice(0, criteria.advancedFilters?.jobTitle?.length || 20),
-        pagination: {
-          page: 1,
-          limit: 20,
-          hasMore: prospectsWithIntent.length > 20
-        }
+        totalResults: searchResults.totalResults,
+        aiInsights: {
+          ...aiInsights,
+          searchQuality: searchResults.searchInsights.averageConfidence > 70 ? 'high' : 
+                        searchResults.searchInsights.averageConfidence > 40 ? 'medium' : 'low',
+          recommendations: searchResults.searchInsights.missingApiKeys?.length ? 
+            [`Missing API keys: ${searchResults.searchInsights.missingApiKeys.join(', ')}`, ...aiInsights.recommendations] :
+            aiInsights.recommendations
+        },
+        prospects: prospectsWithIntent,
+        pagination: searchResults.pagination
       };
       
     } catch (error) {
@@ -398,6 +441,107 @@ Return as JSON array with this structure:
       priority: "high",
       reasoning: "Strong profile match with search criteria",
     }, index));
+  }
+
+  /**
+   * Transform real API data to enhanced prospects
+   */
+  private async transformRealDataToEnhancedProspects(realProspects: any[]): Promise<EnhancedProspect[]> {
+    return realProspects.map((prospect, index) => ({
+      id: prospect.id || `prospect-${index}`,
+      name: prospect.name,
+      email: prospect.email,
+      title: prospect.title,
+      company: prospect.company,
+      industry: prospect.industry || 'Unknown',
+      location: prospect.location || 'Unknown',
+      aiScore: prospect.aiScore || prospect.dataQuality * 100 || 50,
+      intentSignals: prospect.intentSignals?.map((signal: string) => ({
+        type: this.categorizeIntentSignal(signal),
+        description: signal,
+        confidence: 0.7,
+        source: prospect.sources?.join(', ') || 'API',
+        detectedAt: new Date()
+      })) || [],
+      technographics: {
+        technologies: prospect.enrichmentData?.technologies || [],
+        techStack: this.categorizeTechStack(prospect.enrichmentData?.technologies || []),
+        cloudProvider: this.detectCloudProvider(prospect.enrichmentData?.technologies || []),
+        frameworks: [],
+        languages: []
+      },
+      companyData: {
+        size: prospect.enrichmentData?.companySize || 'Unknown',
+        revenue: prospect.enrichmentData?.revenue || 'Unknown',
+        growth: 'medium',
+        fundingTotal: prospect.enrichmentData?.funding,
+        fundingStage: prospect.enrichmentData?.fundingStage,
+        employees: this.parseEmployeeCount(prospect.enrichmentData?.companySize),
+        yearFounded: undefined
+      },
+      competitiveIntel: {
+        currentSolutions: [],
+        switchingProbability: 0.5,
+        decisionTimeframe: '3-6 months',
+        painPoints: [],
+        budgetRange: undefined
+      },
+      contactData: {
+        phone: prospect.phone,
+        linkedinUrl: prospect.linkedinUrl,
+        twitterUrl: undefined,
+        verified: prospect.dataQuality > 0.7,
+        lastUpdated: new Date(),
+        contactMethods: [
+          prospect.email && 'email',
+          prospect.phone && 'phone',
+          prospect.linkedinUrl && 'linkedin'
+        ].filter(Boolean) as string[]
+      },
+      lookalikeScore: undefined,
+      priorityReason: this.generatePriorityReason(prospect)
+    }));
+  }
+
+  private categorizeIntentSignal(signal: string): 'hiring' | 'funding' | 'technology-adoption' | 'expansion' | 'competitive-switch' {
+    const lowerSignal = signal.toLowerCase();
+    if (lowerSignal.includes('hiring') || lowerSignal.includes('job')) return 'hiring';
+    if (lowerSignal.includes('funding') || lowerSignal.includes('raised')) return 'funding';
+    if (lowerSignal.includes('implement') || lowerSignal.includes('adopt')) return 'technology-adoption';
+    if (lowerSignal.includes('expand') || lowerSignal.includes('growth')) return 'expansion';
+    return 'competitive-switch';
+  }
+
+  private categorizeTechStack(technologies: string[]): 'legacy' | 'modern' | 'cutting-edge' {
+    if (!technologies.length) return 'legacy';
+    const modern = ['React', 'Vue', 'Angular', 'Node.js', 'Python', 'Go', 'Kubernetes'];
+    const cuttingEdge = ['AI/ML', 'Blockchain', 'IoT', 'Edge Computing', 'WebAssembly'];
+    
+    if (technologies.some(tech => cuttingEdge.some(ce => tech.toLowerCase().includes(ce.toLowerCase())))) {
+      return 'cutting-edge';
+    }
+    if (technologies.some(tech => modern.some(m => tech.toLowerCase().includes(m.toLowerCase())))) {
+      return 'modern';
+    }
+    return 'legacy';
+  }
+
+  private detectCloudProvider(technologies: string[]): string | undefined {
+    const providers = ['AWS', 'Azure', 'Google Cloud', 'GCP'];
+    return technologies.find(tech => providers.some(p => tech.toLowerCase().includes(p.toLowerCase())));
+  }
+
+  private parseEmployeeCount(companySize?: string): number {
+    if (!companySize) return 0;
+    const match = companySize.match(/\d+/);
+    return match ? parseInt(match[0]) : 0;
+  }
+
+  private generatePriorityReason(prospect: any): string {
+    if (prospect.aiScore > 80) return 'High AI match score with strong intent signals';
+    if (prospect.sources?.length > 2) return 'Verified across multiple data sources';
+    if (prospect.dataQuality > 0.8) return 'High quality data with verified contact info';
+    return 'Potential opportunity based on search criteria';
   }
 }
 

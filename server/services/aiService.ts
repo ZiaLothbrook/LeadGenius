@@ -268,6 +268,63 @@ class OpenRouterService {
       };
     }
   }
+
+  // Analyze prospect fit for scoring
+  async analyzeProspectFit(params: {
+    prospect: any;
+    searchCriteria: any;
+    dataPoints: {
+      hasEmail: boolean;
+      hasPhone: boolean;
+      hasLinkedIn: boolean;
+      dataSourceCount: number;
+      hasTechnologies: boolean;
+    };
+  }): Promise<{ fitScore: number; intentSignals: string[] }> {
+    const { prospect, searchCriteria, dataPoints } = params;
+    
+    try {
+      const prompt = `Analyze this prospect for fit and intent signals:
+      
+Prospect: ${prospect.name} - ${prospect.title} at ${prospect.company}
+Industry: ${prospect.industry}
+Location: ${prospect.location}
+Search Criteria: ${JSON.stringify(searchCriteria, null, 2)}
+Data Quality: ${JSON.stringify(dataPoints, null, 2)}
+
+Provide a fit score (0-100) and list any buying intent signals you detect.
+Return as JSON: { "fitScore": number, "intentSignals": ["signal1", "signal2"] }`;
+
+      const response = await this.makeRequest(
+        MODELS.CLAUDE_SONNET,
+        [{ role: "user", content: prompt }],
+        "You are an expert sales analyst who identifies high-quality prospects and buying signals."
+      );
+
+      try {
+        const result = JSON.parse(response);
+        return {
+          fitScore: Math.min(100, Math.max(0, result.fitScore)),
+          intentSignals: result.intentSignals || []
+        };
+      } catch {
+        // Fallback scoring based on data quality
+        const baseScore = 50;
+        const emailBonus = dataPoints.hasEmail ? 15 : 0;
+        const phoneBonus = dataPoints.hasPhone ? 10 : 0;
+        const linkedInBonus = dataPoints.hasLinkedIn ? 10 : 0;
+        const sourceBonus = dataPoints.dataSourceCount > 1 ? 15 : 0;
+        
+        return {
+          fitScore: baseScore + emailBonus + phoneBonus + linkedInBonus + sourceBonus,
+          intentSignals: []
+        };
+      }
+    } catch (error) {
+      console.error("Error analyzing prospect fit:", error);
+      return { fitScore: 50, intentSignals: [] };
+    }
+  }
 }
 
 export const aiService = new OpenRouterService();
