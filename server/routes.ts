@@ -147,7 +147,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Campaign routes
   app.get('/api/campaigns', isAuthenticatedLocal, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id || req.user.claims?.sub;
       const campaigns = await storage.getCampaigns(userId);
       res.json(campaigns);
     } catch (error) {
@@ -171,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/campaigns', isAuthenticatedLocal, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id || req.user.claims?.sub;
       const campaignData = insertCampaignSchema.parse({ ...req.body, userId });
       const campaign = await storage.createCampaign(campaignData);
       res.json(campaign);
