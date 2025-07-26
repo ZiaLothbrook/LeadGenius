@@ -329,6 +329,13 @@ const createAdminUser = async () => {
       await createSampleProspects(storage);
     } else {
       console.log("Admin user already exists");
+      
+      // Check if we need to add sample prospects
+      const existingProspects = await storage.getProspects(existingUser.id);
+      if (existingProspects.length === 0) {
+        console.log("Adding sample prospects...");
+        await createSampleProspects(storage);
+      }
     }
   } catch (error) {
     console.error("Error creating admin user:", error);

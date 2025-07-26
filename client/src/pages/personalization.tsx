@@ -59,15 +59,17 @@ export default function Personalization() {
 
   const generateMessageMutation = useMutation({
     mutationFn: async (params: any) => {
-      const response = await apiRequest("POST", "/api/messages/generate", params);
-      return response.json();
+      return apiRequest("/api/messages/generate", {
+        method: "POST",
+        body: params,
+      });
     },
-    onSuccess: (messages) => {
-      setGeneratedMessages(messages);
+    onSuccess: (data) => {
+      setGeneratedMessages([data.message]);
       setIsGenerating(false);
       toast({
-        title: "Success",
-        description: "Personalized messages generated successfully",
+        title: "AI Message Generated",
+        description: `Personalized message created using Claude AI with alternative subject lines`,
       });
     },
     onError: (error) => {
@@ -104,10 +106,9 @@ export default function Personalization() {
     setIsGenerating(true);
     generateMessageMutation.mutate({
       prospectId: selectedProspectId,
-      campaignGoal,
+      messageType: messageType === "email" ? "cold_email" : messageType === "linkedin" ? "linkedin_message" : "follow_up",
       tone,
-      messageType,
-      additionalContext,
+      context: `Campaign Goal: ${campaignGoal}. ${additionalContext}`,
     });
   };
 
