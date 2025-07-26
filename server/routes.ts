@@ -8,6 +8,9 @@ import { aiService } from "./services/aiService";
 import { prospectSearchService, searchFiltersSchema } from "./services/prospectSearchService";
 import { dataAggregationService } from "./services/dataAggregationService";
 import { messageGenerationService } from "./services/messageGenerationService";
+import { campaignExecutionService } from "./services/campaignExecutionService";
+import { emailVerificationService } from "./services/emailVerificationService";
+import { communicationService } from "./services/communicationService";
 import {
   insertProspectSchema,
   insertCampaignSchema,
@@ -271,6 +274,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting campaign:", error);
       res.status(500).json({ message: "Failed to delete campaign" });
+    }
+  });
+
+  // Campaign Execution routes
+  app.post('/api/campaigns/:id/execute', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { channel = 'email', prospectIds, testMode = false } = req.body;
+      const campaignId = req.params.id;
+      
+      console.log(`🚀 Executing campaign ${campaignId} via ${channel}`, {
+        prospectCount: prospectIds?.length || 'all',
+        testMode
+      });
+      
+      const result = await campaignExecutionService.executeCampaign({
+        campaignId,
+        prospectIds,
+        channel,
+        testMode
+      });
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error executing campaign:", error);
+      res.status(500).json({ 
+        message: "Failed to execute campaign",
+        error: error.message 
+      });
+    }
+  });
+
+  // Email verification endpoint
+  app.post('/api/verify/email', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      const result = await emailVerificationService.validateEmail(email);
+      const isDeliverable = emailVerificationService.isDeliverable(result);
+      const riskLevel = emailVerificationService.getRiskLevel(result);
+      
+      res.json({
+        email,
+        isDeliverable,
+        riskLevel,
+        details: result
+      });
+    } catch (error: any) {
+      console.error("Error verifying email:", error);
+      res.status(500).json({ 
+        message: "Failed to verify email",
+        error: error.message 
+      });
+    }
+  });
+
+  // Batch email verification endpoint
+  app.post('/api/verify/emails', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { emails } = req.body;
+      
+      if (!emails || !Array.isArray(emails)) {
+        return res.status(400).json({ message: "Emails array is required" });
+      }
+      
+      const results = await emailVerificationService.validateBatch(emails);
+      
+      res.json({
+        total: emails.length,
+        results: results.map(({ email, result }) => ({
+          email,
+          isDeliverable: emailVerificationService.isDeliverable(result),
+          riskLevel: emailVerificationService.getRiskLevel(result),
+          status: result.status
+        }))
+      });
+    } catch (error: any) {
+      console.error("Error verifying emails:", error);
+      res.status(500).json({ 
+        message: "Failed to verify emails",
+        error: error.message 
+      });
+    }
+  });
+
+  // Communication status endpoint
+  app.get('/api/communication/status', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const twilioConfigured = communicationService.isConfigured();
+      const twilioPhone = communicationService.getPhoneNumber();
+      const zeroBounceCreditCheck = await emailVerificationService.getCredits();
+      
+      res.json({
+        twilio: {
+          configured: twilioConfigured,
+          phoneNumber: twilioPhone ? twilioPhone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3') : null
+        },
+        zerobounce: {
+          configured: !!process.env.ZEROBOUNCE_API_KEY,
+          credits: zeroBounceCreditCheck
+        },
+        sendgrid: {
+          configured: !!process.env.SENDGRID_API_KEY
+        }
+      });
+    } catch (error: any) {
+      console.error("Error checking communication status:", error);
+      res.status(500).json({ 
+        message: "Failed to check communication status",
+        error: error.message 
+      });
     }
   });
 

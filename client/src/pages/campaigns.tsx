@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -21,13 +24,23 @@ import {
   Phone,
   Layers,
   Plus,
-  TrendingUp
+  TrendingUp,
+  CheckCircle,
+  AlertCircle,
+  Info,
+  Zap,
+  ShieldCheck,
+  DollarSign
 } from "lucide-react";
 
 export default function Campaigns() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
+  const [showExecuteDialog, setShowExecuteDialog] = useState(false);
+  const [executionChannel, setExecutionChannel] = useState<string>("email");
+  const [testMode, setTestMode] = useState(true);
 
   // Redirect to home if not authenticated
   useEffect(() => {
@@ -51,6 +64,11 @@ export default function Campaigns() {
 
   const { data: stats } = useQuery({
     queryKey: ["/api/dashboard/stats"],
+    retry: false,
+  });
+
+  const { data: communicationStatus } = useQuery({
+    queryKey: ["/api/communication/status"],
     retry: false,
   });
 
@@ -97,6 +115,57 @@ export default function Campaigns() {
     updateCampaignMutation.mutate({
       id: campaignId,
       data: { status: "active" }
+    });
+  };
+
+  const executeCampaignMutation = useMutation({
+    mutationFn: async ({ campaignId, channel, testMode }: { campaignId: string; channel: string; testMode: boolean }) => {
+      const response = await apiRequest("POST", `/api/campaigns/${campaignId}/execute`, {
+        channel,
+        testMode,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      
+      const successCount = data.results?.filter((r: any) => r.success).length || 0;
+      const failCount = data.results?.filter((r: any) => !r.success).length || 0;
+      
+      toast({
+        title: "Campaign Executed",
+        description: `Successfully sent to ${successCount} prospects. ${failCount} failed.`,
+      });
+      setShowExecuteDialog(false);
+    },
+    onError: (error: any) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Execution Failed",
+        description: error.message || "Failed to execute campaign",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleExecuteCampaign = () => {
+    if (!selectedCampaign) return;
+    
+    executeCampaignMutation.mutate({
+      campaignId: selectedCampaign.id,
+      channel: executionChannel,
+      testMode,
     });
   };
 
@@ -156,6 +225,70 @@ export default function Campaigns() {
 
   return (
     <div className="p-6">
+      {/* Communication Status */}
+      {communicationStatus && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5" />
+              Communication Services Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4" />
+                  <span>Email Verification</span>
+                </div>
+                {communicationStatus.zerobounce?.configured ? (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <span className="text-sm text-muted-foreground">
+                      {communicationStatus.zerobounce.credits || 0} credits
+                    </span>
+                  </div>
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                )}
+              </div>
+              
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  <span>SMS/Voice</span>
+                </div>
+                {communicationStatus.twilio?.configured ? (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    <span className="text-sm text-muted-foreground">
+                      {communicationStatus.twilio.phoneNumber}
+                    </span>
+                  </div>
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                )}
+              </div>
+              
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Send className="w-4 h-4" />
+                  <span>Email Sending</span>
+                </div>
+                {communicationStatus.sendgrid?.configured ? (
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                    <span className="text-sm text-amber-600">Pending setup</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Campaign Overview Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <Card>
@@ -333,6 +466,21 @@ export default function Campaigns() {
                               <Archive className="w-4 h-4" />
                             </Button>
                           )}
+                          {(campaign.status === "active" || campaign.status === "paused") && (
+                            <Button 
+                              variant="default" 
+                              size="sm"
+                              onClick={() => {
+                                setSelectedCampaign(campaign);
+                                setShowExecuteDialog(true);
+                              }}
+                              data-testid={`button-execute-${campaign.id}`}
+                              className="ml-2"
+                            >
+                              <Zap className="w-4 h-4 mr-1" />
+                              Execute
+                            </Button>
+                          )}
                           {campaign.status === "completed" && (
                             <Button 
                               variant="ghost" 
@@ -359,6 +507,140 @@ export default function Campaigns() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Execution Dialog */}
+      <Dialog open={showExecuteDialog} onOpenChange={setShowExecuteDialog}>
+        <DialogContent className="sm:max-w-[525px]">
+          <DialogHeader>
+            <DialogTitle>Execute Campaign</DialogTitle>
+            <DialogDescription>
+              Choose how you want to execute the "{selectedCampaign?.name}" campaign.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Channel Selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Communication Channel</label>
+              <Select value={executionChannel} onValueChange={setExecutionChannel}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="email">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4" />
+                      Email Campaign
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="sms">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4" />
+                      SMS Campaign
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="call">
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-4 h-4" />
+                      Voice Call Campaign
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Test Mode */}
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="test-mode" 
+                checked={testMode} 
+                onCheckedChange={(checked) => setTestMode(checked as boolean)}
+              />
+              <label 
+                htmlFor="test-mode" 
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Test Mode (Simulate sending without actual delivery)
+              </label>
+            </div>
+
+            {/* Channel-specific warnings */}
+            {executionChannel === "email" && !communicationStatus?.sendgrid?.configured && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Note:</strong> SendGrid is not configured. Emails will be queued for sending once you configure SendGrid.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {executionChannel === "sms" && !communicationStatus?.twilio?.configured && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Warning:</strong> Twilio is not configured. SMS sending will fail without proper configuration.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {executionChannel === "call" && !communicationStatus?.twilio?.configured && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Warning:</strong> Twilio is not configured. Voice calls will fail without proper configuration.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Cost Estimate */}
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Estimated Cost</span>
+                <DollarSign className="w-4 h-4 text-slate-600" />
+              </div>
+              <div className="space-y-1 text-sm text-slate-600">
+                {executionChannel === "email" && (
+                  <>
+                    <p>Email verification: ~${((selectedCampaign?.totalProspects || 0) * 0.004).toFixed(2)}</p>
+                    {communicationStatus?.sendgrid?.configured && (
+                      <p>Email sending: ~${((selectedCampaign?.totalProspects || 0) * 0.001).toFixed(2)}</p>
+                    )}
+                  </>
+                )}
+                {executionChannel === "sms" && (
+                  <p>SMS sending: ~${((selectedCampaign?.totalProspects || 0) * 0.01).toFixed(2)}</p>
+                )}
+                {executionChannel === "call" && (
+                  <p>Voice calls: ~${((selectedCampaign?.totalProspects || 0) * 0.02).toFixed(2)}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExecuteDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleExecuteCampaign} 
+              disabled={executeCampaignMutation.isPending}
+              className="min-w-[100px]"
+            >
+              {executeCampaignMutation.isPending ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span>
+                  Executing...
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4 mr-2" />
+                  Execute {testMode ? "Test" : "Campaign"}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

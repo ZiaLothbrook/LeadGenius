@@ -215,6 +215,22 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(campaignProspects.createdAt));
   }
 
+  async getCampaignProspectsWithDetails(campaignId: string): Promise<Prospect[]> {
+    const campaignProspectsList = await db
+      .select()
+      .from(campaignProspects)
+      .where(eq(campaignProspects.campaignId, campaignId))
+      .orderBy(desc(campaignProspects.createdAt));
+    
+    const prospectIds = campaignProspectsList.map(cp => cp.prospectId);
+    if (prospectIds.length === 0) return [];
+    
+    return await db
+      .select()
+      .from(prospects)
+      .where(sql`${prospects.id} IN ${prospectIds}`);
+  }
+
   async createCampaignProspect(campaignProspect: InsertCampaignProspect): Promise<CampaignProspect> {
     const [newCampaignProspect] = await db
       .insert(campaignProspects)
