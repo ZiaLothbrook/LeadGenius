@@ -102,6 +102,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log('🔍 Searching prospects:', req.body);
       
+      const userId = req.user.id || req.user.claims?.sub;
+      
       const results = await prospectDiscoveryService.searchProspects({
         keywords: keywords || '',
         industry,
@@ -111,7 +113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         technologies,
         page: page || 1,
         limit: limit || 50
-      });
+      }, userId);
       
       // Transform the response to match frontend expectations
       const response = {

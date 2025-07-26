@@ -45,18 +45,43 @@ export class ApolloClient {
     }
 
     try {
+      // Build request payload
+      const payload: any = {
+        per_page: params.limit || 25,
+        page: params.page || 1,
+      };
+      
+      // Only add fields that have values to avoid validation errors
+      if (params.keywords) {
+        payload.q_keywords = params.keywords;
+      }
+      
+      if (params.jobTitles && params.jobTitles.length > 0) {
+        payload.person_titles = params.jobTitles;
+      }
+      
+      if (params.industry) {
+        payload.organization_industry_tag_names = [params.industry];
+      }
+      
+      if (params.location) {
+        payload.organization_locations = [params.location];
+      }
+      
+      const companySizes = this.mapCompanySize(params.companySize);
+      if (companySizes.length > 0) {
+        payload.organization_num_employees_ranges = companySizes;
+      }
+      
+      if (params.technologies && params.technologies.length > 0) {
+        payload.technologies = params.technologies;
+      }
+      
+      console.log('🚀 Apollo API request payload:', JSON.stringify(payload, null, 2));
+      
       const response = await axios.post(
         `${this.baseUrl}/mixed_people/search`,
-        {
-          per_page: params.limit || 25,
-          page: params.page || 1,
-          person_titles: params.jobTitles || [],
-          organization_industry_tag_names: params.industry ? [params.industry] : [],
-          organization_locations: params.location ? [params.location] : [],
-          q_keywords: params.keywords || '',
-          organization_num_employees_ranges: this.mapCompanySize(params.companySize),
-          technologies: params.technologies || [],
-        },
+        payload,
         {
           headers: {
             'X-Api-Key': this.apiKey,
@@ -88,8 +113,18 @@ export class ApolloClient {
         results: prospects,
         total: response.data.pagination.total_entries,
       };
-    } catch (error) {
-      console.error('Apollo API error:', error);
+    } catch (error: any) {
+      console.error('Apollo API error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      
+      // If it's a 422 error, log the specific validation issues
+      if (error.response?.status === 422) {
+        console.error('Apollo API validation error:', JSON.stringify(error.response.data, null, 2));
+      }
+      
       return { results: [], total: 0 };
     }
   }

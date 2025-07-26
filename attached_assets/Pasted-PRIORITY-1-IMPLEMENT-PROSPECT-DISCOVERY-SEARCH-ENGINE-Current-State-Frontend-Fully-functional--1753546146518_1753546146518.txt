@@ -1,0 +1,156 @@
+PRIORITY 1: IMPLEMENT PROSPECT DISCOVERY SEARCH ENGINE
+
+Current State
+
+•
+Frontend: Fully functional with professional search interface, filters, and advanced options
+
+•
+Backend: Completely missing - returns "0 prospects" for all searches
+
+•
+Error Message: Shows "AI Search Insights" with 0 Intent Signals, 0 Lookalike Matches, 0 Competitive Opportunities
+
+•
+Recommendations Shown: "Add API keys for ZOOMINFO_API_KEY, HUNTER_API_KEY, CLEARBIT_API_KEY, LINKEDIN_API_KEY"
+
+Exact Implementation Required
+
+Backend API Endpoint
+
+JavaScript
+
+
+// POST /api/prospects/search
+app.post('/api/prospects/search', async (req, res) => {
+  const { keywords, industry, companySize, location, advancedFilters } = req.body;
+  
+  try {
+    // 1. Apollo.io Integration
+    const apolloResults = await searchApollo({
+      keywords,
+      industry,
+      companySize,
+      location
+    });
+    
+    // 2. ZoomInfo Integration (if available)
+    const zoomInfoResults = await searchZoomInfo({
+      keywords,
+      industry,
+      companySize
+    });
+    
+    // 3. Merge and deduplicate results
+    const mergedResults = deduplicateProspects([
+      ...apolloResults,
+      ...zoomInfoResults
+    ]);
+    
+    // 4. AI Scoring and Ranking
+    const scoredResults = await scoreProspects(mergedResults, {
+      keywords,
+      industry,
+      targetProfile: advancedFilters
+    });
+    
+    // 5. Return structured response
+    res.json({
+      prospects: scoredResults,
+      totalFound: scoredResults.length,
+      aiInsights: {
+        intentSignals: calculateIntentSignals(scoredResults),
+        lookalikematches: findLookalikes(scoredResults),
+        competitiveOpportunities: identifyCompetitors(scoredResults),
+        searchQuality: calculateSearchQuality(scoredResults)
+      },
+      recommendations: generateSearchRecommendations(scoredResults)
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Search failed', details: error.message });
+  }
+});
+
+
+Required API Integrations
+
+1.
+Apollo.io API ($49-119/month)
+
+•
+Endpoint: https://api.apollo.io/v1/mixed_people/search
+
+•
+Returns: Contact info, company data, verified emails
+
+
+
+2.
+ZoomInfo API (Enterprise pricing)
+
+•
+Endpoint: https://api.zoominfo.com/lookup/person
+
+•
+Returns: Enhanced company intelligence, technographics
+
+
+
+3.
+Hunter.io API ($49-399/month)
+
+•
+Endpoint: https://api.hunter.io/v2/domain-search
+
+•
+Returns: Email verification, domain intelligence
+
+
+
+Database Schema Updates
+
+SQL
+
+
+CREATE TABLE prospect_searches (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id),
+  search_query JSONB,
+  results_count INTEGER,
+  ai_insights JSONB,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE discovered_prospects (
+  id SERIAL PRIMARY KEY,
+  search_id INTEGER REFERENCES prospect_searches(id),
+  name VARCHAR(255),
+  email VARCHAR(255),
+  company VARCHAR(255),
+  title VARCHAR(255),
+  industry VARCHAR(100),
+  location VARCHAR(255),
+  phone VARCHAR(50),
+  linkedin_url VARCHAR(500),
+  ai_score DECIMAL(3,2),
+  confidence_score DECIMAL(3,2),
+  data_sources TEXT[],
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+
+Success Criteria
+
+•
+Search returns 50-500 relevant prospects per query
+
+•
+AI insights show meaningful data (intent signals, lookalikes)
+
+•
+Response time under 5 seconds
+
+•
+85%+ data accuracy with confidence scores
+

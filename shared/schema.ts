@@ -9,6 +9,7 @@ import {
   integer,
   decimal,
   boolean,
+  serial,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -226,6 +227,39 @@ export const insertAnalyticsSchema = createInsertSchema(analytics).omit({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+
+// Prospect search history tables
+export const prospectSearches = pgTable("prospect_searches", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  searchQuery: jsonb("search_query").notNull(),
+  resultsCount: integer("results_count").notNull(),
+  aiInsights: jsonb("ai_insights"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const discoveredProspects = pgTable("discovered_prospects", {
+  id: serial("id").primaryKey(),
+  searchId: integer("search_id").references(() => prospectSearches.id),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }),
+  company: varchar("company", { length: 255 }),
+  title: varchar("title", { length: 255 }),
+  industry: varchar("industry", { length: 100 }),
+  location: varchar("location", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  linkedinUrl: varchar("linkedin_url", { length: 500 }),
+  aiScore: decimal("ai_score", { precision: 3, scale: 2 }),
+  confidenceScore: decimal("confidence_score", { precision: 3, scale: 2 }),
+  dataSources: text("data_sources").array(),
+  intentSignals: jsonb("intent_signals"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ProspectSearch = typeof prospectSearches.$inferSelect;
+export type InsertProspectSearch = typeof prospectSearches.$inferInsert;
+export type DiscoveredProspect = typeof discoveredProspects.$inferSelect;
+export type InsertDiscoveredProspect = typeof discoveredProspects.$inferInsert;
 export type InsertProspect = z.infer<typeof insertProspectSchema>;
 export type Prospect = typeof prospects.$inferSelect;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
