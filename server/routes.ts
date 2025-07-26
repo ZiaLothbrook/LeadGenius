@@ -5,6 +5,7 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { setupLocalAuth, createAdminUser } from "./localAuth";
 import { z } from "zod";
 import { aiService } from "./services/aiService";
+import { prospectSearchService, searchFiltersSchema } from "./services/prospectSearchService";
 import {
   insertProspectSchema,
   insertCampaignSchema,
@@ -122,25 +123,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Enrich prospect data
-  app.post('/api/prospects/:id/enrich', isAuthenticatedLocal, async (req: any, res) => {
+  // HIGHEST PRIORITY: Prospect search API
+  app.post('/api/prospects/search', isAuthenticatedLocal, async (req: any, res) => {
     try {
-      const prospect = await storage.getProspect(req.params.id);
-      if (!prospect) {
-        return res.status(404).json({ message: "Prospect not found" });
-      }
-
-      const enrichedData = await enrichProspectData(prospect);
-      const updatedProspect = await storage.updateProspect(req.params.id, {
-        ...enrichedData,
-        verified: true,
-        dataQuality: 95,
-      });
-
-      res.json(updatedProspect);
+      // Validate search filters
+      const filters = searchFiltersSchema.parse(req.body);
+      
+      // Perform search using the search service
+      const searchResults = await prospectSearchService.searchProspects(filters);
+      
+      res.json(searchResults);
     } catch (error) {
-      console.error("Error enriching prospect:", error);
-      res.status(500).json({ message: "Failed to enrich prospect data" });
+      console.error("Error searching prospects:", error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ 
+          message: "Invalid search parameters", 
+          errors: error.errors 
+        });
+      } else {
+        res.status(500).json({ message: "Failed to search prospects" });
+      }
+    }
+  });
+
+  // Get available search filter options
+  app.get('/api/prospects/search/filters', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const filterOptions = prospectSearchService.getFilterOptions();
+      res.json(filterOptions);
+    } catch (error) {
+      console.error("Error fetching filter options:", error);
+      res.status(500).json({ message: "Failed to fetch filter options" });
     }
   });
 
