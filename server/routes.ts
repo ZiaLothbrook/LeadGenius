@@ -55,27 +55,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // AI Message Generation API
-  app.post('/api/messages/generate', isAuthenticatedLocal, async (req: any, res) => {
-    try {
-      console.log("✉️ AI message generation request:", req.body);
-      
-      const generatedMessage = await messageGenerationService.generateMessage(req.body);
-      
-      console.log("✅ Message generated successfully:", {
-        id: generatedMessage.id,
-        confidence: generatedMessage.aiConfidence,
-      });
-      
-      res.json(generatedMessage);
-    } catch (error) {
-      console.error("❌ Error generating message:", error);
-      res.status(500).json({ 
-        message: "Failed to generate personalized message",
-        error: error.message 
-      });
-    }
-  });
+
 
   // Bulk Message Generation API
   app.post('/api/messages/generate-bulk', isAuthenticatedLocal, async (req: any, res) => {
@@ -314,51 +294,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/messages/generate', isAuthenticatedLocal, async (req: any, res) => {
     try {
       const userId = req.user.id || req.user.claims?.sub;
-      const { prospectId, messageType = "cold_email", tone = "professional", context } = req.body;
+      const { prospect, campaignContext, messageOptions } = req.body;
 
-      const prospect = await storage.getProspect(prospectId);
-      if (!prospect) {
-        return res.status(404).json({ message: "Prospect not found" });
+      if (!prospect || !campaignContext || !messageOptions) {
+        return res.status(400).json({ 
+          message: "Missing required fields: prospect, campaignContext, or messageOptions" 
+        });
       }
 
-      // Generate personalized message using OpenRouter
-      const messageContent = await aiService.generatePersonalizedMessage(
-        {
-          name: prospect.name || "there",
-          company: prospect.company || "",
-          title: prospect.title || "",
-          industry: prospect.industry || "",
-          location: prospect.location || undefined,
-        },
-        messageType,
-        tone,
-        context
+      // Generate personalized message using new MessageGenerationService
+      const result = await messageGenerationService.generatePersonalizedMessage(
+        prospect,
+        campaignContext,
+        messageOptions
       );
 
-      // Generate subject lines
-      const subjects = await aiService.generateEmailSubjects({
-        name: prospect.name || "there",
-        company: prospect.company || "",
-        title: prospect.title || "",
-      });
-
-      // Save generated message to database
-      const message = await storage.createMessage({
+      // Save the main message to database
+      const savedMessage = await storage.createMessage({
         userId,
-        prospectId,
-        type: messageType,
-        subject: subjects[0] || `Re: ${prospect.company}`,
-        content: messageContent,
-        tone,
+        prospectId: prospect.id || "", // Use empty string if no ID
+        type: messageOptions.templateType || "cold-email",
+        subject: result.subject || "",
+        content: result.body,
+        tone: messageOptions.tone || "professional",
         aiGenerated: true,
         variant: "A",
-        confidenceScore: 85,
+        confidenceScore: result.aiConfidence,
       });
 
       res.json({
-        message,
-        alternativeSubjects: subjects.slice(1),
-        messageContent,
+        id: savedMessage.id,
+        subject: result.subject,
+        body: result.body,
+        personalizationScore: result.personalizationScore,
+        aiConfidence: result.aiConfidence,
+        metadata: result.metadata,
+        variants: result.variants || [],
       });
     } catch (error) {
       console.error("Error generating message:", error);
