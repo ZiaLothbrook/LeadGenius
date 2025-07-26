@@ -59,17 +59,46 @@ export default function Personalization() {
 
   const generateMessageMutation = useMutation({
     mutationFn: async (params: any) => {
+      const selectedProspect = prospects?.find((p: any) => p.id === selectedProspectId);
+      if (!selectedProspect) throw new Error("No prospect selected");
+      
+      const payload = {
+        prospect: {
+          name: selectedProspect.name,
+          title: selectedProspect.title,
+          company: selectedProspect.company,
+          industry: selectedProspect.industry,
+          email: selectedProspect.email,
+        },
+        campaignContext: {
+          productName: "AI Lead Generation Platform",
+          productDescription: campaignGoal || "Revolutionary platform for intelligent prospect discovery",
+          valueProposition: "Transform your sales process with AI-powered insights",
+          callToAction: "Schedule a quick demo",
+        },
+        messageOptions: {
+          tone: tone as "professional" | "casual" | "friendly" | "executive",
+          length: "medium" as const,
+          personalizationLevel: "hyper-personalized" as const,
+          includeDataPoints: ["company", "industry", "role"],
+          templateType: messageType === "email" ? "cold-email" : "linkedin",
+        },
+      };
+      
       return apiRequest("/api/messages/generate", {
         method: "POST",
-        body: params,
+        body: payload,
       });
     },
     onSuccess: (data) => {
-      setGeneratedMessages([data.message]);
+      setGeneratedMessages([data]);
       setIsGenerating(false);
+      if (data.variants && data.variants.length > 0) {
+        setSelectedVariant(data.id);
+      }
       toast({
         title: "AI Message Generated",
-        description: `Personalized message created using Claude AI with alternative subject lines`,
+        description: `Personalized message created with ${data.metadata?.personalizationPoints?.length || 0} personalization points`,
       });
     },
     onError: (error) => {
@@ -104,12 +133,7 @@ export default function Personalization() {
     }
 
     setIsGenerating(true);
-    generateMessageMutation.mutate({
-      prospectId: selectedProspectId,
-      messageType: messageType === "email" ? "cold_email" : messageType === "linkedin" ? "linkedin_message" : "follow_up",
-      tone,
-      context: `Campaign Goal: ${campaignGoal}. ${additionalContext}`,
-    });
+    generateMessageMutation.mutate({});
   };
 
   const handleCopyMessage = (content: string) => {
@@ -318,7 +342,7 @@ export default function Personalization() {
               {generatedMessages.length > 0 && (
                 <div className="flex items-center space-x-2">
                   <span className="text-sm text-slate-500" data-testid="text-ai-confidence">
-                    AI Confidence: {generatedMessages[0]?.confidenceScore || 94}%
+                    AI Confidence: {generatedMessages[0]?.aiConfidence || 94}%
                   </span>
                   <Info className="w-4 h-4 text-slate-400" />
                 </div>
@@ -328,77 +352,159 @@ export default function Personalization() {
             {/* Message Variants */}
             <div className="space-y-6">
               {generatedMessages.length > 0 ? (
-                generatedMessages.map((message, index) => (
-                  <div key={message.id} className="border border-slate-200 rounded-lg p-4">
+                <>
+                  {/* Main Message */}
+                  <div className="border border-blue-200 bg-blue-50 rounded-lg p-4 mb-4">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-2">
-                        <Badge 
-                          variant={index === 0 ? "default" : "secondary"}
-                          data-testid={`badge-variant-${message.variant}`}
-                        >
-                          Variant {message.variant}
+                        <Badge variant="default" data-testid="badge-main">
+                          Main Message
                         </Badge>
                         <span className="text-sm text-slate-500 capitalize">{tone} tone</span>
+                        {generatedMessages[0].metadata && (
+                          <span className="text-xs text-slate-500">
+                            {generatedMessages[0].metadata.readingTime} read
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-2">
                         <Button 
                           variant="ghost" 
                           size="sm"
-                          onClick={() => handleCopyMessage(message.content)}
-                          data-testid={`button-copy-${message.variant}`}
+                          onClick={() => handleCopyMessage(generatedMessages[0].body)}
+                          data-testid="button-copy-main"
                         >
                           <Copy className="w-4 h-4" />
                         </Button>
                         <Button 
                           variant="ghost" 
                           size="sm"
-                          data-testid={`button-edit-${message.variant}`}
+                          data-testid="button-edit-main"
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>
                     
-                    <div className="bg-slate-50 rounded-lg p-4 mb-3">
-                      {message.subject && (
-                        <p className="text-sm text-slate-700 mb-3" data-testid={`text-subject-${message.variant}`}>
-                          <strong>Subject:</strong> {message.subject}
+                    <div className="bg-white rounded-lg p-4 mb-3">
+                      {generatedMessages[0].subject && (
+                        <p className="text-sm text-slate-700 mb-3" data-testid="text-subject-main">
+                          <strong>Subject:</strong> {generatedMessages[0].subject}
                         </p>
                       )}
                       <div 
                         className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap"
-                        data-testid={`text-content-${message.variant}`}
+                        data-testid="text-content-main"
                       >
-                        {message.content}
+                        {generatedMessages[0].body}
                       </div>
                     </div>
                     
+                    {generatedMessages[0].metadata && (
+                      <div className="mb-3">
+                        <div className="flex flex-wrap gap-2">
+                          {generatedMessages[0].metadata.personalizationPoints.map((point, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {point}
+                            </Badge>
+                          ))}
+                        </div>
+                        {generatedMessages[0].metadata.complianceCheck && !generatedMessages[0].metadata.complianceCheck.isCompliant && (
+                          <p className="text-xs text-amber-600 mt-2">
+                            ⚠️ {generatedMessages[0].metadata.complianceCheck.suggestions.join(". ")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4 text-xs text-slate-500">
-                        <span>Length: {message.content.split(' ').length} words</span>
-                        <span>Read time: {Math.ceil(message.content.split(' ').length / 4)}s</span>
-                        <span className={getConfidenceColor(message.confidenceScore)}>
-                          Confidence: {message.confidenceScore}%
+                        <span>Score: {generatedMessages[0].personalizationScore}/100</span>
+                        <span className={getConfidenceColor(generatedMessages[0].aiConfidence)}>
+                          Confidence: {generatedMessages[0].aiConfidence}%
                         </span>
+                        {generatedMessages[0].metadata && (
+                          <span>CTA Strength: {generatedMessages[0].metadata.callToActionStrength}/10</span>
+                        )}
                       </div>
                       <Button 
-                        variant={selectedVariant === message.id ? "default" : "secondary"}
+                        variant={selectedVariant === generatedMessages[0].id ? "default" : "secondary"}
                         size="sm"
-                        onClick={() => handleSelectVariant(message.id)}
-                        data-testid={`button-select-${message.variant}`}
+                        onClick={() => handleSelectVariant(generatedMessages[0].id)}
+                        data-testid="button-select-main"
                       >
-                        {selectedVariant === message.id ? (
+                        {selectedVariant === generatedMessages[0].id ? (
                           <>
                             <CheckCircle className="w-4 h-4 mr-1" />
                             Selected
                           </>
                         ) : (
-                          "Select This Version"
+                          "Select Main Version"
                         )}
                       </Button>
                     </div>
                   </div>
-                ))
+
+                  {/* Variants */}
+                  {generatedMessages[0].variants && generatedMessages[0].variants.length > 0 && (
+                    <>
+                      <h4 className="font-medium text-slate-900 mb-3">A/B Test Variants</h4>
+                      {generatedMessages[0].variants.map((variant, index) => (
+                        <div key={variant.id} className="border border-slate-200 rounded-lg p-4 mb-3">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center space-x-2">
+                              <Badge variant="secondary" data-testid={`badge-variant-${index}`}>
+                                {variant.description}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleCopyMessage(variant.body)}
+                                data-testid={`button-copy-variant-${index}`}
+                              >
+                                <Copy className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          <div className="bg-slate-50 rounded-lg p-4 mb-3">
+                            {variant.subject && (
+                              <p className="text-sm text-slate-700 mb-3" data-testid={`text-subject-variant-${index}`}>
+                                <strong>Subject:</strong> {variant.subject}
+                              </p>
+                            )}
+                            <div 
+                              className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap"
+                              data-testid={`text-content-variant-${index}`}
+                            >
+                              {variant.body}
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-between">
+                            <Button 
+                              variant={selectedVariant === variant.id ? "default" : "secondary"}
+                              size="sm"
+                              onClick={() => handleSelectVariant(variant.id)}
+                              data-testid={`button-select-variant-${index}`}
+                            >
+                              {selectedVariant === variant.id ? (
+                                <>
+                                  <CheckCircle className="w-4 h-4 mr-1" />
+                                  Selected
+                                </>
+                              ) : (
+                                "Select This Variant"
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </>
               ) : (
                 <div className="text-center py-12 text-slate-500">
                   <Zap className="w-12 h-12 mx-auto mb-4 text-slate-300" />

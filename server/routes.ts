@@ -7,6 +7,7 @@ import { z } from "zod";
 import { aiService } from "./services/aiService";
 import { prospectSearchService, searchFiltersSchema } from "./services/prospectSearchService";
 import { dataAggregationService } from "./services/dataAggregationService";
+import { messageGenerationService } from "./services/messageGenerationService";
 import {
   insertProspectSchema,
   insertCampaignSchema,
@@ -51,6 +52,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // AI Message Generation API
+  app.post('/api/messages/generate', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      console.log("✉️ AI message generation request:", req.body);
+      
+      const generatedMessage = await messageGenerationService.generateMessage(req.body);
+      
+      console.log("✅ Message generated successfully:", {
+        id: generatedMessage.id,
+        confidence: generatedMessage.aiConfidence,
+      });
+      
+      res.json(generatedMessage);
+    } catch (error) {
+      console.error("❌ Error generating message:", error);
+      res.status(500).json({ 
+        message: "Failed to generate personalized message",
+        error: error.message 
+      });
+    }
+  });
+
+  // Bulk Message Generation API
+  app.post('/api/messages/generate-bulk', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      console.log("📧 Bulk message generation request for", req.body.prospects?.length, "prospects");
+      
+      const bulkResponse = await messageGenerationService.generateBulkMessages(req.body);
+      
+      console.log("✅ Bulk generation completed:", {
+        totalGenerated: bulkResponse.totalGenerated,
+        processingTime: bulkResponse.processingTime,
+      });
+      
+      res.json(bulkResponse);
+    } catch (error) {
+      console.error("❌ Error in bulk message generation:", error);
+      res.status(500).json({ 
+        message: "Failed to generate bulk messages",
+        error: error.message 
+      });
     }
   });
 
