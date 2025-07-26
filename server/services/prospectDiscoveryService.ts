@@ -158,8 +158,8 @@ export class ProspectDiscoveryService {
               location: prospect.location || null,
               phone: prospect.phone || null,
               linkedinUrl: prospect.linkedinUrl || null,
-              aiScore: prospect.aiScore?.toString() || null,
-              confidenceScore: prospect.dataQuality.toString(),
+              aiScore: prospect.aiScore ? Math.min(999.99, prospect.aiScore).toFixed(2) : null,
+              confidenceScore: Math.min(999.99, prospect.dataQuality * 100).toFixed(2),
               dataSources: prospect.sources,
               intentSignals: prospect.intentSignals ? prospect.intentSignals as any : null,
             }));
