@@ -98,9 +98,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Prospect routes
   app.post('/api/prospects/search', isAuthenticatedLocal, async (req: any, res) => {
     try {
+      console.log('🔍 Raw request body:', JSON.stringify(req.body, null, 2));
+      
       const { keywords, industry, companySize, location, jobTitles, technologies, page, limit } = req.body;
       
-      console.log('🔍 Searching prospects:', req.body);
+      console.log('🔍 Extracted search parameters:', {
+        keywords,
+        industry,
+        companySize, 
+        location,
+        jobTitles,
+        technologies,
+        page,
+        limit
+      });
       
       const userId = req.user.id || req.user.claims?.sub;
       
