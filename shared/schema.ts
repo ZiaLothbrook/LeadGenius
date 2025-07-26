@@ -1,0 +1,229 @@
+import { sql, relations } from 'drizzle-orm';
+import {
+  index,
+  jsonb,
+  pgTable,
+  timestamp,
+  varchar,
+  text,
+  integer,
+  decimal,
+  boolean,
+} from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+
+// Session storage table.
+// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+export const sessions = pgTable(
+  "sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: jsonb("sess").notNull(),
+    expire: timestamp("expire").notNull(),
+  },
+  (table) => [index("IDX_session_expire").on(table.expire)],
+);
+
+// User storage table.
+// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").unique(),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  profileImageUrl: varchar("profile_image_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const prospects = pgTable("prospects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  name: varchar("name").notNull(),
+  email: varchar("email"),
+  phone: varchar("phone"),
+  company: varchar("company"),
+  title: varchar("title"),
+  industry: varchar("industry"),
+  location: varchar("location"),
+  linkedinUrl: varchar("linkedin_url"),
+  websiteUrl: varchar("website_url"),
+  score: integer("score").default(0),
+  verified: boolean("verified").default(false),
+  dataSource: varchar("data_source"),
+  dataQuality: integer("data_quality").default(0),
+  notes: text("notes"),
+  tags: text("tags").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const campaigns = pgTable("campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  name: varchar("name").notNull(),
+  type: varchar("type").notNull(), // email, linkedin, phone, multi-channel
+  status: varchar("status").notNull().default("draft"), // draft, active, paused, completed
+  subject: varchar("subject"),
+  messageTemplate: text("message_template"),
+  goal: varchar("goal"),
+  tone: varchar("tone"),
+  totalProspects: integer("total_prospects").default(0),
+  sent: integer("sent").default(0),
+  delivered: integer("delivered").default(0),
+  opened: integer("opened").default(0),
+  clicked: integer("clicked").default(0),
+  replied: integer("replied").default(0),
+  converted: integer("converted").default(0),
+  scheduled: timestamp("scheduled"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const campaignProspects = pgTable("campaign_prospects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: varchar("campaign_id").notNull().references(() => campaigns.id),
+  prospectId: varchar("prospect_id").notNull().references(() => prospects.id),
+  status: varchar("status").notNull().default("pending"), // pending, sent, delivered, opened, clicked, replied, converted
+  personalizedMessage: text("personalized_message"),
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  openedAt: timestamp("opened_at"),
+  clickedAt: timestamp("clicked_at"),
+  repliedAt: timestamp("replied_at"),
+  convertedAt: timestamp("converted_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const messages = pgTable("messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  prospectId: varchar("prospect_id").notNull().references(() => prospects.id),
+  campaignId: varchar("campaign_id").references(() => campaigns.id),
+  type: varchar("type").notNull(), // email, linkedin, phone_script
+  subject: varchar("subject"),
+  content: text("content").notNull(),
+  tone: varchar("tone"),
+  aiGenerated: boolean("ai_generated").default(false),
+  variant: varchar("variant"), // A, B, C for A/B testing
+  confidenceScore: integer("confidence_score"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const analytics = pgTable("analytics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  campaignId: varchar("campaign_id").references(() => campaigns.id),
+  date: timestamp("date").notNull(),
+  metric: varchar("metric").notNull(), // sent, delivered, opened, clicked, replied, converted
+  value: integer("value").notNull(),
+  channel: varchar("channel"), // email, linkedin, phone, multi-channel
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Relations
+export const usersRelations = relations(users, ({ many }) => ({
+  prospects: many(prospects),
+  campaigns: many(campaigns),
+  messages: many(messages),
+  analytics: many(analytics),
+}));
+
+export const prospectsRelations = relations(prospects, ({ one, many }) => ({
+  user: one(users, {
+    fields: [prospects.userId],
+    references: [users.id],
+  }),
+  campaignProspects: many(campaignProspects),
+  messages: many(messages),
+}));
+
+export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
+  user: one(users, {
+    fields: [campaigns.userId],
+    references: [users.id],
+  }),
+  campaignProspects: many(campaignProspects),
+  messages: many(messages),
+  analytics: many(analytics),
+}));
+
+export const campaignProspectsRelations = relations(campaignProspects, ({ one }) => ({
+  campaign: one(campaigns, {
+    fields: [campaignProspects.campaignId],
+    references: [campaigns.id],
+  }),
+  prospect: one(prospects, {
+    fields: [campaignProspects.prospectId],
+    references: [prospects.id],
+  }),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  user: one(users, {
+    fields: [messages.userId],
+    references: [users.id],
+  }),
+  prospect: one(prospects, {
+    fields: [messages.prospectId],
+    references: [prospects.id],
+  }),
+  campaign: one(campaigns, {
+    fields: [messages.campaignId],
+    references: [campaigns.id],
+  }),
+}));
+
+export const analyticsRelations = relations(analytics, ({ one }) => ({
+  user: one(users, {
+    fields: [analytics.userId],
+    references: [users.id],
+  }),
+  campaign: one(campaigns, {
+    fields: [analytics.campaignId],
+    references: [campaigns.id],
+  }),
+}));
+
+// Insert schemas
+export const insertProspectSchema = createInsertSchema(prospects).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCampaignSchema = createInsertSchema(campaigns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCampaignProspectSchema = createInsertSchema(campaignProspects).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAnalyticsSchema = createInsertSchema(analytics).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types
+export type UpsertUser = typeof users.$inferInsert;
+export type User = typeof users.$inferSelect;
+export type InsertProspect = z.infer<typeof insertProspectSchema>;
+export type Prospect = typeof prospects.$inferSelect;
+export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
+export type Campaign = typeof campaigns.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertCampaignProspect = z.infer<typeof insertCampaignProspectSchema>;
+export type CampaignProspect = typeof campaignProspects.$inferSelect;
+export type InsertAnalytics = z.infer<typeof insertAnalyticsSchema>;
+export type Analytics = typeof analytics.$inferSelect;
