@@ -6,6 +6,7 @@ import { setupLocalAuth, createAdminUser } from "./localAuth";
 import { z } from "zod";
 import { aiService } from "./services/aiService";
 import { prospectSearchService, searchFiltersSchema } from "./services/prospectSearchService";
+import { prospectDiscoveryService } from "./services/prospectDiscoveryService";
 import { dataAggregationService } from "./services/dataAggregationService";
 import { messageGenerationService } from "./services/messageGenerationService";
 import { campaignExecutionService } from "./services/campaignExecutionService";

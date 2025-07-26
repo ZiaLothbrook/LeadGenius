@@ -33,14 +33,15 @@ export default function Discovery() {
     location: "",
     technologies: "",
   });
+  const [searchTrigger, setSearchTrigger] = useState({});
   const [selectedProspects, setSelectedProspects] = useState<string[]>([]);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Use search API instead of general prospects endpoint
-  const { data: searchResults, isLoading, refetch } = useQuery({
-    queryKey: ["/api/prospects/search", searchFilters],
+  const { data: searchResults, isLoading } = useQuery({
+    queryKey: ["/api/prospects/search", searchTrigger],
     queryFn: async () => {
       const response = await apiRequest('POST', '/api/prospects/search', {
           keywords: searchFilters.search || undefined,
@@ -54,7 +55,7 @@ export default function Discovery() {
       });
       return response.json();
     },
-    retry: false,
+    enabled: Object.keys(searchTrigger).length > 0, // Only fetch when search is triggered
   });
 
   const prospects = searchResults?.prospects || [];
@@ -118,7 +119,7 @@ export default function Discovery() {
   };
 
   const handleSearch = () => {
-    refetch();
+    setSearchTrigger({ filters: searchFilters, timestamp: Date.now() });
   };
 
   const handleSelectProspect = (prospectId: string) => {
