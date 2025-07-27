@@ -189,6 +189,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // TEMPORARY TEST ENDPOINT - Remove after Apollo testing
+  app.post('/api/test/prospects/search', async (req: any, res) => {
+    try {
+      console.log('🧪 TEST ENDPOINT: Apollo API integration test');
+      console.log('🔍 Test search parameters:', JSON.stringify(req.body, null, 2));
+      
+      const { keywords, industry, companySize, location, jobTitles, technologies, page, limit } = req.body;
+      
+      const results = await prospectDiscoveryService.searchProspects({
+        keywords: keywords || 'technology startups',
+        industry: industry || 'technology',
+        companySize: companySize || '51-200',
+        location,
+        jobTitles,
+        technologies,
+        page: page || 1,
+        limit: limit || 10
+      }, '65594c27-8659-44fe-b287-5a1cd88ce289'); // Use existing user ID
+
+      console.log('📊 TEST RESULTS:', {
+        success: results.success,
+        totalResults: results.totalResults,
+        prospectsReturned: results.prospects.length,
+        dataSourcesUsed: results.searchInsights.dataSourcesUsed,
+        missingApiKeys: results.searchInsights.missingApiKeys
+      });
+      
+      res.json({
+        test: true,
+        apolloApiWorking: results.totalResults > 0,
+        prospects: results.prospects,
+        total: results.totalResults,
+        searchInsights: results.searchInsights,
+        pagination: results.pagination
+      });
+    } catch (error: any) {
+      console.error("TEST ENDPOINT ERROR:", error);
+      res.status(500).json({ 
+        test: true,
+        error: error.message,
+        apolloApiWorking: false
+      });
+    }
+  });
+
   // Prospect routes with caching
   app.post('/api/prospects/search', 
     isAuthenticatedLocal, 

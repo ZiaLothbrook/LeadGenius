@@ -317,23 +317,7 @@ export class ProspectDiscoveryService {
           limit: criteria.limit,
         });
       
-      case 'clearbit':
-        return await (client as ClearbitClient).search({
-          domain: criteria.domain,
-          email: criteria.email,
-          company: criteria.keywords,
-          limit: criteria.limit,
-        });
-      
-      case 'linkedin':
-        return await (client as LinkedInClient).search({
-          keywords: criteria.keywords,
-          title: criteria.jobTitles?.[0],
-          location: criteria.location,
-          industry: criteria.industry,
-          limit: criteria.limit,
-          page: criteria.page,
-        });
+
       
       default:
         return { results: [], total: 0 };
@@ -489,7 +473,7 @@ export class ProspectDiscoveryService {
         
         if (isSamePerson) {
           // Merge data from multiple sources
-          existing.sources = [...new Set([...existing.sources, ...prospect.sources])];
+          existing.sources = Array.from(new Set([...existing.sources, ...prospect.sources]));
           existing.dataQuality = Math.max(existing.dataQuality, prospect.dataQuality);
           
           // Merge enrichment data
