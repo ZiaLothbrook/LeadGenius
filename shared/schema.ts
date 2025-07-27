@@ -160,7 +160,51 @@ export const messages = pgTable("messages", {
   aiGenerated: boolean("ai_generated").default(false),
   variant: varchar("variant"), // A, B, C for A/B testing
   confidenceScore: integer("confidence_score"),
+  
+  // Enhanced CARD-026 fields for comprehensive AI message generation
+  personalizationScore: integer("personalization_score").default(0), // 0-100
+  personalizationLevel: varchar("personalization_level").default("basic"), // basic, advanced, hyper-personalized
+  personalizationPoints: text("personalization_points").array().default(sql`ARRAY[]::text[]`),
+  contextDataUsed: jsonb("context_data_used"), // What data points were used
+  qualityScore: integer("quality_score").default(0), // Overall message quality 0-100
+  
+  // Advanced AI metadata
+  promptUsed: text("prompt_used"),
+  modelUsed: varchar("model_used"),
+  generationTime: integer("generation_time"), // milliseconds
+  aiConfidence: integer("ai_confidence").default(0), // 0-100
+  
+  // Message analysis metrics
+  readingTime: integer("reading_time"), // seconds
+  wordCount: integer("word_count"),
+  sentimentScore: decimal("sentiment_score", { precision: 5, scale: 2 }), // -1.0 to 1.0
+  ctaStrength: integer("cta_strength").default(0), // 0-10
+  complianceScore: integer("compliance_score").default(100), // 0-100
+  
+  // Enhanced A/B testing and variants
+  parentMessageId: varchar("parent_message_id").references(() => messages.id),
+  variantType: varchar("variant_type"), // subject, tone, length, cta, approach
+  variantDescription: varchar("variant_description"),
+  testGroup: varchar("test_group"), // A, B, C, etc.
+  testHypothesis: text("test_hypothesis"),
+  
+  // Quality assurance system
+  qaStatus: varchar("qa_status").default("pending"), // pending, approved, rejected, needs_review
+  qaScore: integer("qa_score"), // 0-100
+  qaFeedback: text("qa_feedback"),
+  qaReviewerId: varchar("qa_reviewer_id").references(() => users.id),
+  qaReviewedAt: timestamp("qa_reviewed_at"),
+  
+  // Performance tracking
+  openRate: decimal("open_rate", { precision: 5, scale: 2 }),
+  clickRate: decimal("click_rate", { precision: 5, scale: 2 }),
+  responseRate: decimal("response_rate", { precision: 5, scale: 2 }),
+  
+  status: varchar("status").default("draft"), // draft, sent, delivered, opened, replied
+  scheduledAt: timestamp("scheduled_at"),
+  sentAt: timestamp("sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const analytics = pgTable("analytics", {
