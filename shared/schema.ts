@@ -617,3 +617,240 @@ export type InsertSearchOptimization = z.infer<typeof insertSearchOptimizationSc
 export type SearchOptimization = typeof searchOptimizations.$inferSelect;
 export type InsertSearchInsight = z.infer<typeof insertSearchInsightSchema>;
 export type SearchInsight = typeof searchInsights.$inferSelect;
+
+// CARD-028: Context Analysis Engine Tables
+
+// Company intelligence profiles
+export const companyProfiles = pgTable("company_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  companyName: varchar("company_name", { length: 255 }).notNull(),
+  domain: varchar("domain", { length: 255 }),
+  industry: varchar("industry", { length: 100 }),
+  size: varchar("size", { length: 50 }), // startup, small, medium, large, enterprise
+  
+  // Company intelligence data
+  businessModel: varchar("business_model", { length: 100 }), // B2B, B2C, marketplace, etc.
+  revenueRange: varchar("revenue_range", { length: 50 }),
+  fundingStage: varchar("funding_stage", { length: 50 }),
+  techStack: text("tech_stack").array().default(sql`ARRAY[]::text[]`),
+  competitorAnalysis: jsonb("competitor_analysis"),
+  marketPosition: varchar("market_position", { length: 50 }), // leader, challenger, niche, follower
+  
+  // AI-generated insights
+  contextScore: decimal("context_score", { precision: 5, scale: 2 }), // 0-100
+  personalityProfile: jsonb("personality_profile"), // company culture, communication style
+  decisionMakingProcess: jsonb("decision_making_process"),
+  painPoints: text("pain_points").array().default(sql`ARRAY[]::text[]`),
+  priorities: text("priorities").array().default(sql`ARRAY[]::text[]`),
+  communicationStyle: varchar("communication_style", { length: 50 }), // formal, casual, technical
+  
+  // Enrichment metadata
+  dataSource: varchar("data_source", { length: 50 }),
+  lastAnalyzed: timestamp("last_analyzed"),
+  analysisVersion: varchar("analysis_version", { length: 20 }).default("1.0"),
+  confidence: decimal("confidence", { precision: 5, scale: 2 }),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_company_profiles_user_id").on(table.userId),
+  index("idx_company_profiles_domain").on(table.domain),
+  index("idx_company_profiles_industry").on(table.industry),
+]);
+
+// Industry trend analysis
+export const industryTrends = pgTable("industry_trends", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  industry: varchar("industry", { length: 100 }).notNull(),
+  
+  // Trend analysis data
+  marketSize: decimal("market_size", { precision: 15, scale: 2 }),
+  growthRate: decimal("growth_rate", { precision: 5, scale: 2 }),
+  maturityStage: varchar("maturity_stage", { length: 50 }), // emerging, growth, mature, decline
+  keyDrivers: text("key_drivers").array().default(sql`ARRAY[]::text[]`),
+  challenges: text("challenges").array().default(sql`ARRAY[]::text[]`),
+  opportunities: text("opportunities").array().default(sql`ARRAY[]::text[]`),
+  
+  // Technology trends
+  emergingTechnologies: text("emerging_technologies").array().default(sql`ARRAY[]::text[]`),
+  disruptiveTrends: text("disruptive_trends").array().default(sql`ARRAY[]::text[]`),
+  adoptionPatterns: jsonb("adoption_patterns"),
+  
+  // AI-generated insights
+  trendScore: decimal("trend_score", { precision: 5, scale: 2 }), // 0-100
+  predictiveInsights: jsonb("predictive_insights"),
+  recommendedActions: text("recommended_actions").array().default(sql`ARRAY[]::text[]`),
+  
+  // Metadata
+  analysisDate: timestamp("analysis_date").defaultNow(),
+  dataSource: varchar("data_source", { length: 50 }),
+  confidence: decimal("confidence", { precision: 5, scale: 2 }),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_industry_trends_user_id").on(table.userId),
+  index("idx_industry_trends_industry").on(table.industry),
+  index("idx_industry_trends_analysis_date").on(table.analysisDate),
+]);
+
+// Context analysis results  
+export const contextAnalyses = pgTable("context_analyses", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  prospectId: varchar("prospect_id").references(() => prospects.id),
+  companyProfileId: integer("company_profile_id").references(() => companyProfiles.id),
+  
+  // Analysis results
+  overallScore: decimal("overall_score", { precision: 5, scale: 2 }).notNull(), // 0-100
+  contextFactors: jsonb("context_factors"), // timing, relevance, readiness, authority
+  personalizationOpportunities: jsonb("personalization_opportunities"),
+  recommendedApproach: text("recommended_approach"),
+  keyMessages: text("key_messages").array().default(sql`ARRAY[]::text[]`),
+  
+  // Scoring breakdown
+  timingScore: decimal("timing_score", { precision: 5, scale: 2 }),
+  relevanceScore: decimal("relevance_score", { precision: 5, scale: 2 }),
+  authorityScore: decimal("authority_score", { precision: 5, scale: 2 }),
+  readinessScore: decimal("readiness_score", { precision: 5, scale: 2 }),
+  
+  // AI insights
+  aiInsights: jsonb("ai_insights"),
+  riskFactors: text("risk_factors").array().default(sql`ARRAY[]::text[]`),
+  successFactors: text("success_factors").array().default(sql`ARRAY[]::text[]`),
+  nextBestActions: text("next_best_actions").array().default(sql`ARRAY[]::text[]`),
+  
+  // Metadata
+  analysisType: varchar("analysis_type", { length: 50 }).default("comprehensive"), // quick, comprehensive, deep
+  modelVersion: varchar("model_version", { length: 20 }).default("1.0"),
+  processingTime: integer("processing_time"), // milliseconds
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_context_analyses_user_id").on(table.userId),
+  index("idx_context_analyses_prospect_id").on(table.prospectId),
+  index("idx_context_analyses_score").on(table.overallScore),
+  index("idx_context_analyses_created_at").on(table.createdAt),
+]);
+
+// Personalization context scoring
+export const personalizationContexts = pgTable("personalization_contexts", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  prospectId: varchar("prospect_id").references(() => prospects.id),
+  contextAnalysisId: integer("context_analysis_id").references(() => contextAnalyses.id),
+  
+  // Personalization scores
+  personalityFit: decimal("personality_fit", { precision: 5, scale: 2 }), // 0-100
+  communicationStyle: varchar("communication_style", { length: 50 }),
+  preferredTone: varchar("preferred_tone", { length: 50 }), // professional, casual, technical, friendly
+  decisionMakingStyle: varchar("decision_making_style", { length: 50 }), // analytical, intuitive, consensus, authority
+  
+  // Context variables
+  industryContext: jsonb("industry_context"),
+  roleContext: jsonb("role_context"),
+  companyContext: jsonb("company_context"),
+  personalContext: jsonb("personal_context"),
+  
+  // Optimization factors
+  messageOptimization: jsonb("message_optimization"),
+  channelPreferences: text("channel_preferences").array().default(sql`ARRAY[]::text[]`),
+  timingRecommendations: jsonb("timing_recommendations"),
+  contentRecommendations: jsonb("content_recommendations"),
+  
+  // Performance tracking
+  effectivenessScore: decimal("effectiveness_score", { precision: 5, scale: 2 }),
+  conversionProbability: decimal("conversion_probability", { precision: 5, scale: 2 }),
+  engagementPrediction: jsonb("engagement_prediction"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_personalization_contexts_user_id").on(table.userId),
+  index("idx_personalization_contexts_prospect_id").on(table.prospectId),
+  index("idx_personalization_contexts_personality_fit").on(table.personalityFit),
+]);
+
+// Context-based message optimization
+export const messageOptimizations = pgTable("message_optimizations", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  messageId: varchar("message_id").references(() => messages.id),
+  contextAnalysisId: integer("context_analysis_id").references(() => contextAnalyses.id),
+  
+  // Original vs optimized
+  originalMessage: text("original_message"),
+  optimizedMessage: text("optimized_message").notNull(),
+  optimizationType: varchar("optimization_type", { length: 50 }), // tone, length, structure, personalization
+  
+  // Optimization metrics
+  improvementScore: decimal("improvement_score", { precision: 5, scale: 2 }), // 0-100
+  readabilityScore: decimal("readability_score", { precision: 5, scale: 2 }),
+  personalizationScore: decimal("personalization_score", { precision: 5, scale: 2 }),
+  engagementScore: decimal("engagement_score", { precision: 5, scale: 2 }),
+  
+  // AI analysis
+  optimizationRationale: text("optimization_rationale"),
+  keyChanges: text("key_changes").array().default(sql`ARRAY[]::text[]`),
+  expectedImpact: jsonb("expected_impact"),
+  riskAssessment: jsonb("risk_assessment"),
+  
+  // A/B testing data
+  testVariant: varchar("test_variant", { length: 10 }), // A, B, C
+  performanceMetrics: jsonb("performance_metrics"),
+  isWinner: boolean("is_winner").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_message_optimizations_user_id").on(table.userId),
+  index("idx_message_optimizations_message_id").on(table.messageId),
+  index("idx_message_optimizations_improvement_score").on(table.improvementScore),
+  index("idx_message_optimizations_created_at").on(table.createdAt),
+]);
+
+// Create insert schemas for context analysis tables
+export const insertCompanyProfileSchema = createInsertSchema(companyProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertIndustryTrendSchema = createInsertSchema(industryTrends).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertContextAnalysisSchema = createInsertSchema(contextAnalyses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPersonalizationContextSchema = createInsertSchema(personalizationContexts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMessageOptimizationSchema = createInsertSchema(messageOptimizations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Context analysis types
+export type InsertCompanyProfile = z.infer<typeof insertCompanyProfileSchema>;
+export type CompanyProfile = typeof companyProfiles.$inferSelect;
+export type InsertIndustryTrend = z.infer<typeof insertIndustryTrendSchema>;
+export type IndustryTrend = typeof industryTrends.$inferSelect;
+export type InsertContextAnalysis = z.infer<typeof insertContextAnalysisSchema>;
+export type ContextAnalysis = typeof contextAnalyses.$inferSelect;
+export type InsertPersonalizationContext = z.infer<typeof insertPersonalizationContextSchema>;
+export type PersonalizationContext = typeof personalizationContexts.$inferSelect;
+export type InsertMessageOptimization = z.infer<typeof insertMessageOptimizationSchema>;
+export type MessageOptimization = typeof messageOptimizations.$inferSelect;

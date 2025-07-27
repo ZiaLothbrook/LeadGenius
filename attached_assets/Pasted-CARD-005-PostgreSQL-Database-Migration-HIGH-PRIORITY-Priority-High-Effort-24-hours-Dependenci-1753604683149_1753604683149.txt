@@ -1,0 +1,197 @@
+CARD-005: PostgreSQL Database Migration 🔧 HIGH PRIORITY
+
+Priority: High
+Effort: 24 hours
+Dependencies: CARD-004 (FastAPI)
+
+Current Problem: Current database may not support advanced AI/ML features
+Solution: Migrate to PostgreSQL with pgvector for AI capabilities
+
+Technical Requirements:
+
+•
+PostgreSQL 15+ with pgvector extension
+
+•
+Database schema migration from current system
+
+•
+Vector storage for AI embeddings
+
+•
+Full-text search capabilities
+
+•
+Performance optimization and indexing
+
+Implementation Details:
+
+SQL
+
+
+-- Enhanced schema with vector support
+CREATE TABLE prospects (
+    id SERIAL PRIMARY KEY,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    email VARCHAR(255) UNIQUE,
+    company VARCHAR(255),
+    title VARCHAR(255),
+    confidence_score FLOAT,
+    embedding VECTOR(1536), -- OpenAI embeddings
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+
+Acceptance Criteria:
+
+
+
+
+All existing prospect data migrated successfully
+
+
+
+
+Vector storage for AI embeddings functional
+
+
+
+
+Full-text search across prospect data
+
+
+
+
+Database performance optimized with proper indexing
+
+
+
+
+Backup and recovery procedures implemented
+
+
+
+
+Connection pooling and async operations
+
+Testing:
+
+•
+Data migration validation
+
+•
+Vector search functionality testing
+
+•
+Performance testing with large datasets
+
+•
+Backup and recovery testing
+
+Nexus.ai Branding:
+
+•
+Database naming conventions using Nexus.ai terminology
+
+•
+Confidence scoring methodology aligned with Nexus.ai standards
+
+
+
+
+
+CARD-006: Redis Caching Implementation 🔧 HIGH PRIORITY
+
+Priority: High
+Effort: 16 hours
+Dependencies: CARD-004 (FastAPI)
+
+Current Problem: No caching leading to repeated API calls and poor performance
+Solution: Implement Redis for API response caching and session management
+
+Technical Requirements:
+
+•
+Redis server setup and configuration
+
+•
+API response caching strategy
+
+•
+Session management and user data
+
+•
+Rate limiting implementation
+
+•
+Cache invalidation policies
+
+Implementation Details:
+
+Python
+
+
+# Redis caching structure
+@app.get("/api/prospects/{prospect_id}")
+@cache(expire=3600)  # 1 hour cache
+async def get_prospect(prospect_id: int):
+    # Check Redis cache first
+    # Fetch from database if not cached
+    # Store in cache for future requests
+
+
+Acceptance Criteria:
+
+
+
+
+API responses cached for 1-24 hours based on data type
+
+
+
+
+60-80% reduction in external API calls
+
+
+
+
+Session data stored in Redis
+
+
+
+
+Rate limiting prevents API abuse
+
+
+
+
+Cache hit ratio >70%
+
+
+
+
+Automatic cache invalidation for stale data
+
+Testing:
+
+•
+Cache performance testing
+
+•
+Cache invalidation testing
+
+•
+Rate limiting validation
+
+•
+Session management testing
+
+Nexus.ai Branding:
+
+•
+Cache keys using Nexus.ai naming conventions
+
+•
+Performance metrics aligned with Nexus.ai standards
+

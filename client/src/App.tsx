@@ -13,6 +13,7 @@ import Dashboard from "@/pages/dashboard";
 import Discovery from "@/pages/discovery";
 import Enrichment from "@/pages/enrichment";
 import Personalization from "@/pages/personalization";
+import ContextAnalysis from "@/pages/context-analysis";
 import Admin from "@/pages/admin";
 import EmailDelivery from "@/pages/email-delivery";
 import LinkedIn from "@/pages/linkedin";
@@ -49,6 +50,7 @@ function Router() {
             <Route path="/discovery" component={Discovery} />
             <Route path="/enrichment" component={Enrichment} />
             <Route path="/personalization" component={Personalization} />
+            <Route path="/context-analysis" component={ContextAnalysis} />
             <Route path="/campaigns" component={Campaigns} />
             <Route path="/email-delivery" component={EmailDelivery} />
             <Route path="/linkedin" component={LinkedIn} />
