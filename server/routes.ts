@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { setupLocalAuth, createAdminUser } from "./localAuth";
+import { setupLocalAuth, isAuthenticatedLocal, createAdminUser } from "./localAuth";
 import { z } from "zod";
 import { aiService } from "./services/aiService";
 import { pythonAI } from "./services/pythonAiClient";
@@ -21,9 +21,12 @@ import {
 } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
+  // Auth middleware - setup both Replit and local auth
   await setupAuth(app);
   await setupLocalAuth(app);
+  
+  // Create admin user if it doesn't exist
+  await createAdminUser();
   
   // Create admin user on startup
   await createAdminUser();
