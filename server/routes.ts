@@ -16,6 +16,10 @@ import { communicationService } from "./services/communicationService";
 import { linkedinMessagingService } from "./services/linkedinMessagingService";
 import { postmarkService } from "./services/postmarkService";
 import { postmarkServerManager } from "./services/postmarkServerManager";
+import { apiGateway } from "./middleware/apiGateway";
+import { apiDocumentation } from "./middleware/apiDocumentation";
+import { apiMonitoring } from "./middleware/apiMonitoring";
+import { setupApiGatewayRoutes } from "./routes/apiGatewayRoutes";
 import {
   insertProspectSchema,
   insertCampaignSchema,
@@ -68,14 +72,22 @@ async function testApiKey(service: string, apiKey: string): Promise<boolean> {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize API Gateway middleware stack
+  console.log('🌐 Setting up API Gateway...');
+  apiGateway.initializeMiddleware(app);
+  
+  // Initialize API monitoring
+  apiMonitoring.initialize();
+  app.use(apiMonitoring.monitorRequest());
+  
+  // Initialize API documentation
+  apiDocumentation.initializeDocumentation(app);
+  
   // Auth middleware - setup both Replit and local auth
   await setupAuth(app);
   await setupLocalAuth(app);
   
   // Create admin user if it doesn't exist
-  await createAdminUser();
-  
-  // Create admin user on startup
   await createAdminUser();
 
   // Custom authentication middleware that handles both Replit and local auth
@@ -1948,6 +1960,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // Setup API Gateway management routes
+  setupApiGatewayRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;
