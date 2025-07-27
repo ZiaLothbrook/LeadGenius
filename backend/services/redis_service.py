@@ -1,139 +1,89 @@
 """
 Redis service for caching and session management
 """
-import os
 import json
 import redis.asyncio as redis
-from typing import Optional, Any, Dict
+import os
 import logging
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-class RedisService:
+class RedisClient:
+    """Async Redis client for caching operations"""
+    
     def __init__(self):
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        self.redis = redis.from_url(redis_url, decode_responses=True)
+        self.redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
+        self.client = None
+        self.connected = False
+    
+    async def connect(self):
+        """Connect to Redis"""
+        try:
+            self.client = redis.from_url(
+                self.redis_url,
+                encoding='utf8',
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+                retry_on_timeout=True
+            )
+            await self.client.ping()
+            self.connected = True
+            logger.info("✅ Redis connected successfully")
+        except Exception as e:
+            logger.warning(f"⚠️ Redis connection failed: {str(e)} - continuing without cache")
+            self.connected = False
+    
+    async def get_json(self, key: str) -> Optional[Any]:
+        """Get JSON data from Redis"""
+        if not self.connected:
+            return None
         
-    async def ping(self):
-        """Test Redis connection"""
-        return await self.redis.ping()
-    
-    async def get(self, key: str) -> Optional[str]:
-        """Get value from Redis"""
         try:
-            return await self.redis.get(key)
+            data = await self.client.get(key)
+            if data:
+                return json.loads(data)
+            return None
         except Exception as e:
-            logger.error(f"Redis GET error for key {key}: {e}")
+            logger.warning(f"Redis get failed: {str(e)}")
             return None
     
-    async def set(self, key: str, value: Any, expire: Optional[int] = None) -> bool:
-        """Set value in Redis with optional expiration"""
+    async def set_json(self, key: str, data: Any, expire: Optional[int] = None):
+        """Set JSON data in Redis with optional expiration"""
+        if not self.connected:
+            return
+        
         try:
-            if isinstance(value, (dict, list)):
-                value = json.dumps(value)
-            
-            await self.redis.set(key, value, ex=expire)
-            return True
+            json_data = json.dumps(data)
+            await self.client.set(key, json_data, ex=expire)
         except Exception as e:
-            logger.error(f"Redis SET error for key {key}: {e}")
-            return False
+            logger.warning(f"Redis set failed: {str(e)}")
     
-    async def delete(self, key: str) -> bool:
+    async def delete(self, key: str):
         """Delete key from Redis"""
+        if not self.connected:
+            return
+        
         try:
-            await self.redis.delete(key)
-            return True
+            await self.client.delete(key)
         except Exception as e:
-            logger.error(f"Redis DELETE error for key {key}: {e}")
-            return False
-    
-    async def get_json(self, key: str) -> Optional[Dict]:
-        """Get JSON value from Redis"""
-        try:
-            value = await self.get(key)
-            if value:
-                return json.loads(value)
-            return None
-        except Exception as e:
-            logger.error(f"Redis GET_JSON error for key {key}: {e}")
-            return None
-    
-    async def set_json(self, key: str, value: Dict, expire: Optional[int] = None) -> bool:
-        """Set JSON value in Redis"""
-        return await self.set(key, value, expire)
+            logger.warning(f"Redis delete failed: {str(e)}")
     
     async def exists(self, key: str) -> bool:
         """Check if key exists in Redis"""
-        try:
-            return bool(await self.redis.exists(key))
-        except Exception as e:
-            logger.error(f"Redis EXISTS error for key {key}: {e}")
+        if not self.connected:
             return False
-    
-    async def increment(self, key: str, amount: int = 1) -> Optional[int]:
-        """Increment a counter in Redis"""
+        
         try:
-            return await self.redis.incrby(key, amount)
+            return bool(await self.client.exists(key))
         except Exception as e:
-            logger.error(f"Redis INCREMENT error for key {key}: {e}")
-            return None
-    
-    async def set_hash(self, key: str, mapping: Dict[str, Any]) -> bool:
-        """Set hash in Redis"""
-        try:
-            await self.redis.hset(key, mapping=mapping)
-            return True
-        except Exception as e:
-            logger.error(f"Redis HSET error for key {key}: {e}")
+            logger.warning(f"Redis exists check failed: {str(e)}")
             return False
-    
-    async def get_hash(self, key: str) -> Optional[Dict]:
-        """Get hash from Redis"""
-        try:
-            return await self.redis.hgetall(key)
-        except Exception as e:
-            logger.error(f"Redis HGETALL error for key {key}: {e}")
-            return None
-    
-    async def add_to_set(self, key: str, *values) -> bool:
-        """Add values to a set in Redis"""
-        try:
-            await self.redis.sadd(key, *values)
-            return True
-        except Exception as e:
-            logger.error(f"Redis SADD error for key {key}: {e}")
-            return False
-    
-    async def get_set(self, key: str) -> Optional[set]:
-        """Get set from Redis"""
-        try:
-            return await self.redis.smembers(key)
-        except Exception as e:
-            logger.error(f"Redis SMEMBERS error for key {key}: {e}")
-            return None
+
+def cache_key(prefix: str, identifier: str) -> str:
+    """Generate cache key with prefix"""
+    return f"nexus:{prefix}:{identifier}"
 
 # Global Redis client instance
-redis_client = RedisService()
-
-# Cache decorators and utilities
-def cache_key(prefix: str, *args) -> str:
-    """Generate cache key"""
-    return f"{prefix}:" + ":".join(str(arg) for arg in args)
-
-async def cached_request(key: str, expire: int = 3600):
-    """Decorator for caching API requests"""
-    def decorator(func):
-        async def wrapper(*args, **kwargs):
-            # Try to get from cache first
-            cached_result = await redis_client.get_json(key)
-            if cached_result:
-                logger.info(f"Cache hit for key: {key}")
-                return cached_result
-            
-            # Execute function and cache result
-            result = await func(*args, **kwargs)
-            await redis_client.set_json(key, result, expire)
-            logger.info(f"Cache miss, stored result for key: {key}")
-            return result
-        return wrapper
-    return decorator
+redis_client = RedisClient()
