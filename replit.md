@@ -100,8 +100,33 @@ The application is designed for deployment on Repl.it with the following conside
 
 ## Recent Changes (January 2025)
 
+- **FastAPI/Python AI Service Migration** (January 27, 2025):
+  - **MAJOR ARCHITECTURAL CHANGE**: Migrated all AI logic from Node.js/TypeScript to FastAPI/Python
+  - Implemented comprehensive Pydantic validation for all AI requests and responses
+  - Created dual-service architecture: Express.js for web app, FastAPI for AI processing
+  - Built robust fallback system: Python AI service primary, TypeScript AI service as backup
+  - Added intelligent health checks and automatic service switching
+  - Enhanced error handling and request validation with detailed API contracts
+  
+- **Admin Dashboard for LLM Monitoring** (January 27, 2025):
+  - Built comprehensive admin dashboard for monitoring all LLM prompt interactions
+  - Real-time tracking of system and user prompts sent to AI models
+  - Database logging of all prompt inputs, outputs, execution times, and token usage
+  - Advanced analytics including model usage distribution, error rates, and performance metrics
+  - Detailed prompt inspection with input/output data visualization
+  - Usage analytics with configurable time periods (daily, weekly, monthly)
+  - Admin routes for accessing Python AI service analytics and logs
+  
+- **Enhanced AI Service Architecture** (January 27, 2025):
+  - Python FastAPI service running on port 8001 with full Pydantic validation
+  - Comprehensive prompt logging service storing all LLM interactions in PostgreSQL
+  - AI client using OpenRouter with Claude Sonnet 4 (latest model) as primary
+  - Google Gemini Pro 1.5 for structured data enrichment tasks
+  - Automatic token usage tracking and cost monitoring
+  - Service health monitoring and graceful degradation capabilities
+
 - **OpenRouter Integration**: Migrated from OpenAI to OpenRouter API for better model diversity
-  - Primary models: Anthropic Claude 3.5 Sonnet for reasoning and message generation
+  - Primary models: Anthropic Claude Sonnet 4 (latest) for reasoning and message generation
   - Secondary models: Google Gemini Pro 1.5 for structured data enrichment
   - Enhanced AI personalization with context-aware message generation
 - **AI-Powered Features**: 
