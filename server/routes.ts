@@ -1696,6 +1696,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // CARD-036: Email Delivery System Routes
+  app.post('/api/email-delivery/initialize', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const config = req.body;
+      
+      const { emailDeliverySystem } = await import('./services/emailDeliverySystem');
+      await emailDeliverySystem.initialize(config);
+      
+      res.json({
+        success: true,
+        message: "Email delivery system initialized successfully"
+      });
+    } catch (error) {
+      console.error("❌ Error initializing email delivery system:", error);
+      res.status(500).json({ 
+        message: "Failed to initialize email delivery system",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.post('/api/email-delivery/send-optimized', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const params = {
+        ...req.body,
+        userId: req.user?.claims?.sub || req.user?.id
+      };
+      
+      const { emailDeliverySystem } = await import('./services/emailDeliverySystem');
+      const result = await emailDeliverySystem.sendOptimizedEmail(params);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("❌ Error sending optimized email:", error);
+      res.status(500).json({ 
+        message: "Failed to send optimized email",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.get('/api/email-delivery/metrics/:userId', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const { campaignId } = req.query;
+      
+      const { emailDeliverySystem } = await import('./services/emailDeliverySystem');
+      const metrics = await emailDeliverySystem.getDeliveryMetrics(userId, campaignId);
+      
+      res.json(metrics);
+    } catch (error) {
+      console.error("❌ Error getting delivery metrics:", error);
+      res.status(500).json({ 
+        message: "Failed to get delivery metrics",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.get('/api/email-delivery/health-report/:userId', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      
+      const { emailDeliverySystem } = await import('./services/emailDeliverySystem');
+      const report = await emailDeliverySystem.generateDeliveryHealthReport(userId);
+      
+      res.json(report);
+    } catch (error) {
+      console.error("❌ Error generating delivery health report:", error);
+      res.status(500).json({ 
+        message: "Failed to generate delivery health report",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.post('/api/email-delivery/handle-bounce', async (req: any, res) => {
+    try {
+      const bounceData = req.body;
+      
+      const { emailDeliverySystem } = await import('./services/emailDeliverySystem');
+      await emailDeliverySystem.handleBounce(bounceData);
+      
+      res.json({
+        success: true,
+        message: "Bounce handled successfully"
+      });
+    } catch (error) {
+      console.error("❌ Error handling bounce:", error);
+      res.status(500).json({ 
+        message: "Failed to handle bounce",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.post('/api/email-delivery/handle-complaint', async (req: any, res) => {
+    try {
+      const complaintData = req.body;
+      
+      const { emailDeliverySystem } = await import('./services/emailDeliverySystem');
+      await emailDeliverySystem.handleComplaint(complaintData);
+      
+      res.json({
+        success: true,
+        message: "Complaint handled successfully"
+      });
+    } catch (error) {
+      console.error("❌ Error handling complaint:", error);
+      res.status(500).json({ 
+        message: "Failed to handle complaint",
+        error: (error as Error).message 
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
