@@ -85,7 +85,8 @@ export default function Personalization() {
         },
       };
       
-      return apiRequest("POST", "/api/messages/generate", payload);
+      const response = await apiRequest("POST", "/api/messages/generate", payload);
+      return response.json();
     },
     onSuccess: (data: any) => {
       setGeneratedMessages([data]);
