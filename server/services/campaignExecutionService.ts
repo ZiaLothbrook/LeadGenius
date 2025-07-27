@@ -127,7 +127,7 @@ class CampaignExecutionService {
           },
           campaignContext: {
             productName: campaign.name,
-            productDescription: campaign.description || 'Our solution',
+            productDescription: campaign.messageTemplate || 'Our solution',
             valueProposition: 'Improve your business efficiency',
             callToAction: 'Schedule a demo'
           },
@@ -154,7 +154,7 @@ class CampaignExecutionService {
         } else {
           // Send email via Postmark
           const emailResult = await postmarkService.sendEmail({
-            to: prospect.email,
+            to: prospect.email!,
             subject: messageResult.subject || 'Introduction',
             htmlContent: messageResult.body,
             tag: `campaign-${campaign.id}`,
@@ -242,7 +242,7 @@ class CampaignExecutionService {
           },
           campaignContext: {
             productName: campaign.name,
-            productDescription: campaign.description || 'Our solution',
+            productDescription: campaign.messageTemplate || 'Our solution',
             valueProposition: 'Quick value for your business',
             callToAction: 'Reply YES to learn more'
           },

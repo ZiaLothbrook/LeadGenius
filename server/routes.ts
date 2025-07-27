@@ -83,7 +83,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("❌ Error in bulk message generation:", error);
       res.status(500).json({ 
         message: "Failed to generate bulk messages",
-        error: error.message 
+        error: (error as Error).message 
       });
     }
   });
@@ -297,7 +297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("❌ Error in AI-powered search:", error);
       res.status(500).json({ 
         message: "Failed to perform intelligent prospect search",
-        error: error.message 
+        error: (error as Error).message 
       });
     }
   });
@@ -557,7 +557,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         // Fallback to TypeScript AI service
         console.warn("⚠️ Python AI service unavailable, using TypeScript fallback");
-        result = await messageGenerationService.generateMessage(messageRequest);
+        result = await messageGenerationService.generateMessage({
+          ...messageRequest,
+          templateType: messageOptions.templateType || 'cold-email'
+        });
       }
 
       // Save the main message to database (only if we have a valid prospect ID)
@@ -647,9 +650,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use AI to enrich prospect data
       const enrichmentResult = await aiService.enrichProspectData({
         name: prospect.name,
-        company: prospect.company,
-        email: prospect.email,
-        title: prospect.title,
+        company: prospect.company || undefined,
+        email: prospect.email || undefined,
+        title: prospect.title || undefined,
       });
 
       // Analyze prospect priority
@@ -669,7 +672,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         linkedinUrl: enrichmentResult.enrichedData.linkedinUrl || prospect.linkedinUrl,
         dataQuality: Math.round(enrichmentResult.confidence * 100),
         verified: enrichmentResult.confidence > 0.7,
-        priority: priorityAnalysis.priority,
         notes: priorityAnalysis.reasoning,
       });
 
@@ -680,7 +682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         priorityAnalysis,
       });
     } catch (error) {
-      console.error("Error enriching prospect:", error);
+      console.error("Error enriching prospect:", error as Error);
       res.status(500).json({ message: "Failed to enrich prospect data" });
     }
   });
@@ -698,9 +700,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const enrichmentResult = await aiService.enrichProspectData({
             name: prospect.name,
-            company: prospect.company,
-            email: prospect.email,
-            title: prospect.title,
+            company: prospect.company || undefined,
+            email: prospect.email || undefined,
+            title: prospect.title || undefined,
           });
 
           const updatedProspect = await storage.updateProspect(prospectId, {
@@ -721,7 +723,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ enrichedProspects, count: enrichedProspects.length });
     } catch (error) {
-      console.error("Error in batch enrichment:", error);
+      console.error("Error in batch enrichment:", error as Error);
       res.status(500).json({ message: "Failed to enrich prospects" });
     }
   });
