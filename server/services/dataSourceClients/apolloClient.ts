@@ -36,10 +36,19 @@ export class ApolloClient {
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
-    console.log('🚀 Apollo Client initialized with API key:', apiKey ? 'Present' : 'Missing');
+    console.log('🚀 Apollo Client initialized with API key:', apiKey ? `Present (${apiKey.substring(0, 8)}...)` : 'Missing');
+    console.log('🚀 Full API key check:', apiKey === 'mock' ? 'MOCK KEY DETECTED' : 'Real key detected');
   }
 
   async search(params: ApolloSearchParams): Promise<{ results: ApolloProspect[], total: number }> {
+    console.log('🔍 Apollo search called with params:', JSON.stringify(params, null, 2));
+    console.log('🔍 Apollo API key status:', {
+      exists: !!this.apiKey,
+      length: this.apiKey?.length,
+      isMock: this.apiKey === 'mock',
+      prefix: this.apiKey?.substring(0, 8)
+    });
+    
     if (!this.apiKey || this.apiKey === 'mock') {
       // Return empty results if no valid API key
       console.log('❌ Apollo API key missing or set to mock');
@@ -86,6 +95,11 @@ export class ApolloClient {
       }
 
       console.log('🚀 Apollo API request payload:', JSON.stringify(payload, null, 2));
+      console.log('🚀 Apollo API request URL:', `${this.baseUrl}/mixed_people/search`);
+      console.log('🚀 Apollo API request headers:', {
+        'X-Api-Key': `${this.apiKey.substring(0, 8)}...`,
+        'Content-Type': 'application/json'
+      });
 
       const response = await axios.post(
         `${this.baseUrl}/mixed_people/search`,
