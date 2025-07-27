@@ -95,10 +95,15 @@ export class ProspectDiscoveryService {
         .filter(([_, client]) => client !== undefined)
         .map(async ([source, client]) => {
           try {
+            console.log(`🔍 Starting search with ${source}...`);
             const results = await this.searchBySource(source, client!, searchCriteria);
+            console.log(`✅ ${source} search completed:`, {
+              results_count: results.results?.length || 0,
+              total: results.total || 0
+            });
             return { source, results, error: null };
           } catch (error) {
-            console.error(`Error searching ${source}:`, error);
+            console.error(`❌ Error searching ${source}:`, error);
             return { source, results: { results: [], total: 0 }, error };
           }
         });
@@ -107,14 +112,32 @@ export class ProspectDiscoveryService {
       
       // Extract all prospects from results
       const allProspects: UnifiedProspect[] = [];
-      rawResults.forEach(({ source, results }) => {
-        results.results.forEach((prospect: any) => {
-          allProspects.push(this.normalizeProspect(prospect, source));
-        });
+      let totalFromAllSources = 0;
+      
+      rawResults.forEach(({ source, results, error }) => {
+        const count = results.results?.length || 0;
+        const total = results.total || 0;
+        totalFromAllSources += total;
+        
+        console.log(`📊 ${source} returned ${count} prospects (${total} total available)${error ? ' with errors' : ''}`);
+        
+        if (results.results && Array.isArray(results.results)) {
+          results.results.forEach((prospect: any) => {
+            try {
+              const normalizedProspect = this.normalizeProspect(prospect, source);
+              allProspects.push(normalizedProspect);
+            } catch (normalizationError) {
+              console.error(`Error normalizing prospect from ${source}:`, normalizationError);
+            }
+          });
+        }
       });
+
+      console.log(`🔍 Total prospects before deduplication: ${allProspects.length}`);
 
       // Deduplicate prospects
       const deduplicatedProspects = this.deduplicateProspects(allProspects);
+      console.log(`🔍 Total prospects after deduplication: ${deduplicatedProspects.length}`);
       
       // Apply AI scoring and ranking
       const scoredProspects = await this.scoreProspects(deduplicatedProspects, searchCriteria);
@@ -222,16 +245,34 @@ export class ProspectDiscoveryService {
   private async searchBySource(source: string, client: any, criteria: SearchCriteria): Promise<any> {
     switch (source) {
       case 'apollo':
-        return await (client as ApolloClient).search({
+        console.log(`🔍 Apollo search with criteria:`, {
           keywords: criteria.keywords,
           industry: criteria.industry,
           location: criteria.location,
           jobTitles: criteria.jobTitles,
           companySize: criteria.companySize,
           technologies: criteria.technologies,
-          page: criteria.page,
-          limit: criteria.limit,
+          page: criteria.page || 1,
+          limit: criteria.limit || 50,
         });
+        
+        const apolloResult = await (client as ApolloClient).search({
+          keywords: criteria.keywords,
+          industry: criteria.industry,
+          location: criteria.location,
+          jobTitles: criteria.jobTitles,
+          companySize: criteria.companySize,
+          technologies: criteria.technologies,
+          page: criteria.page || 1,
+          limit: criteria.limit || 50,
+        });
+        
+        console.log(`✅ Apollo returned:`, {
+          results_count: apolloResult.results?.length || 0,
+          total_available: apolloResult.total || 0
+        });
+        
+        return apolloResult;
       
       case 'zoominfo':
         return await (client as ZoomInfoClient).search({
@@ -287,8 +328,9 @@ export class ProspectDiscoveryService {
       sources: [source],
     };
 
-    switch (source) {
-      case 'apollo':
+    try {
+      switch (source) {
+        case 'apollo':
         normalized = {
           id: prospect.id,
           name: `${prospect.first_name} ${prospect.last_name}`.trim(),
@@ -376,6 +418,13 @@ export class ProspectDiscoveryService {
           sources: [source],
         };
         break;
+      }
+    } catch (error) {
+      console.error(`❌ Error normalizing prospect from ${source}:`, error);
+      console.error('Raw prospect data:', prospect);
+      // Return a basic normalized prospect with available data
+      normalized.id = prospect.id || `${source}_${Date.now()}_${Math.random()}`;
+      normalized.name = prospect.name || `${prospect.first_name || ''} ${prospect.last_name || ''}`.trim() || 'Unknown';
     }
 
     return normalized;
