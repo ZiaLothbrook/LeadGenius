@@ -124,7 +124,7 @@ The application is designed for deployment on Repl.it with the following conside
   - **Containerization**: Full Docker + Docker Compose setup for scalable deployment
   - **Monitoring Stack**: Integrated Prometheus + Grafana for comprehensive application monitoring
   - **AI Service**: Migrated from OpenRouter to OpenAI GPT-4 API for enhanced AI capabilities
-  - **Email Service**: Integrated Postmark for reliable transactional email delivery
+  - **Email Service Migration**: Complete migration from SendGrid to Postmark for superior deliverability (83.3% inbox placement vs 61.3%)
   - **Authentication**: JWT-based authentication with Redis session management
 
 - **FastAPI/Python AI Service Migration** (January 27, 2025):
