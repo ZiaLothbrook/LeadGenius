@@ -16,6 +16,7 @@ import Personalization from "@/pages/personalization";
 import Admin from "@/pages/admin";
 import Campaigns from "@/pages/campaigns";
 import Analytics from "@/pages/analytics";
+import APIs from "@/pages/apis";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 
@@ -47,6 +48,7 @@ function Router() {
             <Route path="/personalization" component={Personalization} />
             <Route path="/campaigns" component={Campaigns} />
             <Route path="/analytics" component={Analytics} />
+            <Route path="/apis" component={APIs} />
             <Route path="/admin" component={Admin} />
             <Route component={NotFound} />
           </Switch>
