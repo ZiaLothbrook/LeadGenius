@@ -561,6 +561,156 @@ export const messageOptimizationInsights = pgTable("message_optimization_insight
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// CARD-034: Response Detection Tables
+export const responses = pgTable("responses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  campaignId: varchar("campaign_id").references(() => campaigns.id),
+  messageId: varchar("message_id").references(() => messages.id),
+  prospectId: varchar("prospect_id").references(() => prospects.id),
+  
+  // Response content and metadata
+  responseText: text("response_text").notNull(),
+  responseType: varchar("response_type").notNull(), // email, linkedin, phone, chat
+  responseSubject: varchar("response_subject"),
+  responseFrom: varchar("response_from").notNull(), // Email or contact identifier
+  responseTo: varchar("response_to"),
+  
+  // Detection metadata
+  detectionMethod: varchar("detection_method").notNull(), // api_webhook, email_parsing, manual_input, auto_scan
+  detectionConfidence: decimal("detection_confidence", { precision: 5, scale: 2 }).default("100.00"), // 0-100
+  rawData: jsonb("raw_data"), // Original response data for debugging
+  
+  // Threading and conversation tracking
+  threadId: varchar("thread_id"), // Links related responses together
+  isFirstResponse: boolean("is_first_response").default(true),
+  previousResponseId: varchar("previous_response_id").references(() => responses.id),
+  
+  // Response timing
+  responseTime: timestamp("response_time").notNull(), // When the response was actually sent/received
+  detectedAt: timestamp("detected_at").defaultNow(), // When we detected/processed it
+  timeSinceOutreach: integer("time_since_outreach"), // Minutes between original message and response
+  
+  // Processing status
+  processingStatus: varchar("processing_status").default("pending"), // pending, processed, failed, ignored
+  errorMessage: text("error_message"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const responseAnalysis = pgTable("response_analysis", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  responseId: varchar("response_id").notNull().references(() => responses.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  
+  // Sentiment analysis
+  sentimentCategory: varchar("sentiment_category").notNull(), // positive, negative, neutral
+  sentimentScore: decimal("sentiment_score", { precision: 5, scale: 2 }).notNull(), // -100 to +100
+  sentimentConfidence: decimal("sentiment_confidence", { precision: 5, scale: 2 }).default("100.00"), // 0-100
+  emotionalTone: varchar("emotional_tone"), // excited, frustrated, interested, confused, angry, happy
+  
+  // Intent detection
+  intentCategory: varchar("intent_category").notNull(), // interested, not_interested, information_request, objection, meeting_request, referral
+  intentScore: decimal("intent_score", { precision: 5, scale: 2 }).default("0.00"), // 0-100
+  keyIntents: text("key_intents").array().default(sql`ARRAY[]::text[]`), // specific intents detected
+  
+  // Response categorization
+  responseCategory: varchar("response_category").notNull(), // positive_interest, objection, question, out_of_office, unsubscribe, referral, meeting_booked
+  urgencyLevel: varchar("urgency_level").default("medium"), // low, medium, high, urgent
+  actionRequired: boolean("action_required").default(false),
+  
+  // Content analysis
+  keyPhrases: text("key_phrases").array().default(sql`ARRAY[]::text[]`),
+  topics: text("topics").array().default(sql`ARRAY[]::text[]`),
+  questions: text("questions").array().default(sql`ARRAY[]::text[]`),
+  objections: text("objections").array().default(sql`ARRAY[]::text[]`),
+  
+  // AI insights
+  aiSummary: text("ai_summary"),
+  aiRecommendations: text("ai_recommendations").array().default(sql`ARRAY[]::text[]`),
+  nextBestAction: varchar("next_best_action"), // follow_up, schedule_meeting, send_info, close_opportunity, nurture
+  
+  // Quality and confidence metrics
+  analysisConfidence: decimal("analysis_confidence", { precision: 5, scale: 2 }).default("100.00"), // 0-100
+  analysisModel: varchar("analysis_model").default("claude-sonnet-4"), // AI model used for analysis
+  processingTime: integer("processing_time"), // milliseconds
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const responseActions = pgTable("response_actions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  responseId: varchar("response_id").notNull().references(() => responses.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  
+  // Action configuration
+  actionType: varchar("action_type").notNull(), // auto_reply, schedule_follow_up, update_prospect, create_task, send_notification, tag_response
+  actionStatus: varchar("action_status").default("pending"), // pending, executed, failed, cancelled, scheduled
+  actionPriority: varchar("action_priority").default("medium"), // low, medium, high, urgent
+  
+  // Action parameters
+  actionData: jsonb("action_data").notNull(), // Configuration specific to action type
+  triggerConditions: jsonb("trigger_conditions"), // Conditions that triggered this action
+  
+  // Scheduling
+  scheduledFor: timestamp("scheduled_for"),
+  executedAt: timestamp("executed_at"),
+  
+  // Results and feedback
+  executionResult: jsonb("execution_result"), // Result data from action execution
+  success: boolean("success"),
+  errorMessage: text("error_message"),
+  
+  // Automation rules
+  isAutomated: boolean("is_automated").default(true),
+  automationRuleId: varchar("automation_rule_id"), // Reference to rule that created this action
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const responseOptimizationInsights = pgTable("response_optimization_insights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  campaignId: varchar("campaign_id").references(() => campaigns.id),
+  
+  // Insight metadata
+  insightType: varchar("insight_type").notNull(), // response_trend, performance_correlation, optimization_opportunity, success_pattern
+  title: varchar("title").notNull(),
+  description: text("description").notNull(),
+  priority: varchar("priority").default("medium"), // low, medium, high, critical
+  
+  // Data analysis
+  dataTimeRange: jsonb("data_time_range"), // {"start": "2024-01-01", "end": "2024-01-31"}
+  affectedResponses: integer("affected_responses"), // Number of responses this insight relates to
+  responseCategories: text("response_categories").array().default(sql`ARRAY[]::text[]`), // Categories analyzed
+  
+  // Metrics and performance
+  currentMetrics: jsonb("current_metrics"), // Current performance metrics
+  benchmarkMetrics: jsonb("benchmark_metrics"), // Benchmark or historical metrics
+  improvementPotential: decimal("improvement_potential", { precision: 5, scale: 2 }), // Expected improvement %
+  
+  // Recommendations
+  recommendations: jsonb("recommendations").notNull(), // Specific actionable recommendations
+  estimatedImpact: varchar("estimated_impact"), // low, medium, high
+  implementationEffort: varchar("implementation_effort"), // low, medium, high
+  
+  // Tracking
+  status: varchar("status").default("new"), // new, acknowledged, in_progress, implemented, dismissed
+  acknowledgedAt: timestamp("acknowledged_at"),
+  implementedAt: timestamp("implemented_at"),
+  dismissedAt: timestamp("dismissed_at"),
+  
+  // Results tracking
+  actualImpact: decimal("actual_impact", { precision: 5, scale: 2 }), // Actual improvement achieved
+  impactMeasuredAt: timestamp("impact_measured_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   prospects: many(prospects),
@@ -577,6 +727,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   messageOptimizationRules: many(messageOptimizationRules),
   messageEffectivenessScores: many(messageEffectivenessScores),
   messageOptimizationInsights: many(messageOptimizationInsights),
+  responses: many(responses),
+  responseAnalysis: many(responseAnalysis),
+  responseActions: many(responseActions),
+  responseOptimizationInsights: many(responseOptimizationInsights),
 }));
 
 export const prospectsRelations: any = relations(prospects, ({ one, many }) => ({
@@ -586,6 +740,7 @@ export const prospectsRelations: any = relations(prospects, ({ one, many }) => (
   }),
   campaignProspects: many(campaignProspects),
   messages: many(messages),
+  responses: many(responses),
 }));
 
 export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
@@ -596,6 +751,8 @@ export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
   campaignProspects: many(campaignProspects),
   messages: many(messages),
   analytics: many(analytics),
+  responses: many(responses),
+  responseOptimizationInsights: many(responseOptimizationInsights),
 }));
 
 export const campaignProspectsRelations = relations(campaignProspects, ({ one }) => ({
@@ -625,6 +782,7 @@ export const messagesRelations: any = relations(messages, ({ one, many }) => ({
   messageVariants: many(messageVariants),
   performanceMetrics: many(messagePerformanceMetrics),
   effectivenessScores: many(messageEffectivenessScores),
+  responses: many(responses),
 }));
 
 // Message optimization relations
@@ -689,6 +847,65 @@ export const messageOptimizationInsightsRelations = relations(messageOptimizatio
   user: one(users, {
     fields: [messageOptimizationInsights.userId],
     references: [users.id],
+  }),
+}));
+
+// Response Detection Relations (CARD-034)
+export const responsesRelations = relations(responses, ({ one, many }) => ({
+  user: one(users, {
+    fields: [responses.userId],
+    references: [users.id],
+  }),
+  campaign: one(campaigns, {
+    fields: [responses.campaignId],
+    references: [campaigns.id],
+  }),
+  message: one(messages, {
+    fields: [responses.messageId],
+    references: [messages.id],
+  }),
+  prospect: one(prospects, {
+    fields: [responses.prospectId],
+    references: [prospects.id],
+  }),
+  previousResponse: one(responses, {
+    fields: [responses.previousResponseId],
+    references: [responses.id],
+  }),
+  analysis: many(responseAnalysis),
+  actions: many(responseActions),
+}));
+
+export const responseAnalysisRelations = relations(responseAnalysis, ({ one }) => ({
+  response: one(responses, {
+    fields: [responseAnalysis.responseId],
+    references: [responses.id],
+  }),
+  user: one(users, {
+    fields: [responseAnalysis.userId],
+    references: [users.id],
+  }),
+}));
+
+export const responseActionsRelations = relations(responseActions, ({ one }) => ({
+  response: one(responses, {
+    fields: [responseActions.responseId],
+    references: [responses.id],
+  }),
+  user: one(users, {
+    fields: [responseActions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const responseOptimizationInsightsRelations = relations(responseOptimizationInsights, ({ one }) => ({
+  user: one(users, {
+    fields: [responseOptimizationInsights.userId],
+    references: [users.id],
+  }),
+  campaign: one(campaigns, {
+    fields: [responseOptimizationInsights.campaignId],
+    references: [campaigns.id],
   }),
 }));
 
@@ -1009,6 +1226,41 @@ export type InsertTimingOptimization = typeof timingOptimizations.$inferInsert;
 export type SelectTimingOptimization = typeof timingOptimizations.$inferSelect;
 export type InsertScheduleConflict = typeof scheduleConflicts.$inferInsert;
 export type SelectScheduleConflict = typeof scheduleConflicts.$inferSelect;
+
+// Response Detection Insert Schemas (CARD-034)
+export const insertResponseSchema = createInsertSchema(responses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertResponseAnalysisSchema = createInsertSchema(responseAnalysis).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertResponseActionSchema = createInsertSchema(responseActions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertResponseOptimizationInsightSchema = createInsertSchema(responseOptimizationInsights).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+// Response Detection Types (CARD-034)
+export type Response = typeof responses.$inferSelect;
+export type InsertResponse = z.infer<typeof insertResponseSchema>;
+export type ResponseAnalysis = typeof responseAnalysis.$inferSelect;
+export type InsertResponseAnalysis = z.infer<typeof insertResponseAnalysisSchema>;
+export type ResponseAction = typeof responseActions.$inferSelect;
+export type InsertResponseAction = z.infer<typeof insertResponseActionSchema>;
+export type ResponseOptimizationInsight = typeof responseOptimizationInsights.$inferSelect;
+export type InsertResponseOptimizationInsight = z.infer<typeof insertResponseOptimizationInsightSchema>;
 export type InsertProspect = z.infer<typeof insertProspectSchema>;
 export type Prospect = typeof prospects.$inferSelect;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;

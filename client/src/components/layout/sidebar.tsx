@@ -15,7 +15,8 @@ import {
   Users,
   Brain,
   Target,
-  Calendar
+  Calendar,
+  Activity
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -56,6 +57,11 @@ const navItems = [
     name: "Campaign Scheduling",
     href: "/campaign-scheduling",
     icon: Calendar,
+  },
+  {
+    name: "Response Detection",
+    href: "/response-detection",
+    icon: Activity,
   },
   {
     name: "Campaigns",
