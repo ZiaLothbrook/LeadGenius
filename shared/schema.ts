@@ -218,12 +218,63 @@ export const analytics = pgTable("analytics", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Email Verification tables for CARD-013
+export const emailVerifications = pgTable("email_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").notNull(),
+  status: varchar("status").notNull(), // valid, invalid, risky, unknown, error
+  subStatus: varchar("sub_status"),
+  deliverabilityScore: integer("deliverability_score").notNull().default(0),
+  riskLevel: varchar("risk_level").notNull().default('unknown'), // low, medium, high, very_high
+  freeEmail: boolean("free_email").default(false),
+  disposableEmail: boolean("disposable_email").default(false),
+  roleAccount: boolean("role_account").default(false),
+  toxicDomain: boolean("toxic_domain").default(false),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  gender: varchar("gender"),
+  location: varchar("location"),
+  suggestion: varchar("suggestion"),
+  mxRecord: varchar("mx_record"),
+  smtpProvider: varchar("smtp_provider"),
+  creditsUsed: integer("credits_used").default(1),
+  verifiedAt: timestamp("verified_at").defaultNow(),
+  userId: varchar("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const bulkEmailVerifications = pgTable("bulk_email_verifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  batchName: varchar("batch_name"),
+  totalEmails: integer("total_emails").notNull(),
+  processedEmails: integer("processed_emails").notNull(),
+  validEmails: integer("valid_emails").notNull().default(0),
+  invalidEmails: integer("invalid_emails").notNull().default(0),
+  riskyEmails: integer("risky_emails").notNull().default(0),
+  unknownEmails: integer("unknown_emails").notNull().default(0),
+  disposableEmails: integer("disposable_emails").notNull().default(0),
+  deliverabilityRate: integer("deliverability_rate").notNull().default(0),
+  averageScore: integer("average_score").notNull().default(0),
+  totalCreditsUsed: integer("total_credits_used").notNull().default(0),
+  cacheHits: integer("cache_hits").notNull().default(0),
+  apiCalls: integer("api_calls").notNull().default(0),
+  processingTimeMs: integer("processing_time_ms"),
+  status: varchar("status").notNull().default('completed'), // processing, completed, failed
+  errorMessage: text("error_message"),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   prospects: many(prospects),
   campaigns: many(campaigns),
   messages: many(messages),
   analytics: many(analytics),
+  emailVerifications: many(emailVerifications),
+  bulkEmailVerifications: many(bulkEmailVerifications),
 }));
 
 export const prospectsRelations: any = relations(prospects, ({ one, many }) => ({
@@ -282,6 +333,21 @@ export const analyticsRelations = relations(analytics, ({ one }) => ({
   }),
 }));
 
+// Email verification relations
+export const emailVerificationsRelations = relations(emailVerifications, ({ one }) => ({
+  user: one(users, {
+    fields: [emailVerifications.userId],
+    references: [users.id],
+  }),
+}));
+
+export const bulkEmailVerificationsRelations = relations(bulkEmailVerifications, ({ one }) => ({
+  user: one(users, {
+    fields: [bulkEmailVerifications.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -314,6 +380,18 @@ export const insertCampaignProspectSchema = createInsertSchema(campaignProspects
 export const insertAnalyticsSchema = createInsertSchema(analytics).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertEmailVerificationSchema = createInsertSchema(emailVerifications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertBulkEmailVerificationSchema = createInsertSchema(bulkEmailVerifications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 // Types
@@ -363,3 +441,7 @@ export type InsertCampaignProspect = z.infer<typeof insertCampaignProspectSchema
 export type CampaignProspect = typeof campaignProspects.$inferSelect;
 export type InsertAnalytics = z.infer<typeof insertAnalyticsSchema>;
 export type Analytics = typeof analytics.$inferSelect;
+export type InsertEmailVerification = z.infer<typeof insertEmailVerificationSchema>;
+export type EmailVerification = typeof emailVerifications.$inferSelect;
+export type InsertBulkEmailVerification = z.infer<typeof insertBulkEmailVerificationSchema>;
+export type BulkEmailVerification = typeof bulkEmailVerifications.$inferSelect;

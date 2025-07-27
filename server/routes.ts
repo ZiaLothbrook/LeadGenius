@@ -21,6 +21,7 @@ import { apiDocumentation } from "./middleware/apiDocumentation";
 import { apiMonitoring } from "./middleware/apiMonitoring";
 import { setupApiGatewayRoutes } from "./routes/apiGatewayRoutes";
 import { setupCacheRoutes } from "./routes/cacheRoutes";
+import { setupEmailVerificationRoutes } from "./routes/emailVerificationRoutes";
 import { redisClient } from "./services/redisClient";
 import { cacheService } from "./services/cacheService";
 import { sessionCacheService } from "./services/sessionCacheService";
@@ -2005,6 +2006,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Setup cache management routes
   setupCacheRoutes(app);
+
+  // Setup email verification routes (CARD-013)
+  setupEmailVerificationRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;

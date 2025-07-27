@@ -1,430 +1,582 @@
-import { zerobounceService } from "./zerobounceService";
+import { zeroBounceClient, EmailVerificationResult, BulkVerificationResult } from './zeroBounceClient';
+import { cacheService } from './cacheService';
+import { storage } from '../storage';
+import * as crypto from 'crypto';
 
-export interface EmailVerificationResult {
-  email: string;
-  isValid: boolean;
-  deliverability: 'deliverable' | 'undeliverable' | 'risky' | 'unknown';
-  confidence: number; // 0-100
-  reason?: string;
-  details: {
-    syntaxValid: boolean;
-    domainExists: boolean;
-    mxRecordExists: boolean;
-    smtpValid: boolean;
-    disposable: boolean;
-    role: boolean; // info@, admin@, etc.
-    spamTrap: boolean;
-    toxic: boolean;
-  };
-  provider?: string; // gmail, outlook, yahoo, etc.
-  riskScore: number; // 0-100 (higher = riskier)
-}
+/**
+ * Email Verification Service
+ * High-level service for managing email verification with database persistence and analytics
+ */
+export class EmailVerificationService {
+  private static instance: EmailVerificationService;
 
-class EmailVerificationService {
-  
+  private constructor() {}
+
+  public static getInstance(): EmailVerificationService {
+    if (!EmailVerificationService.instance) {
+      EmailVerificationService.instance = new EmailVerificationService();
+    }
+    return EmailVerificationService.instance;
+  }
+
   /**
-   * Verify a single email address for deliverability
+   * Verify single email with caching and database persistence
    */
-  async verifyEmail(email: string): Promise<EmailVerificationResult> {
+  public async verifySingleEmail(
+    email: string, 
+    userId: string, 
+    ipAddress?: string
+  ): Promise<EmailVerificationServiceResult> {
     try {
-      console.log(`🔍 Verifying email: ${email}`);
+      console.log(`📧 Starting email verification for: ${email}`);
       
-      // First, perform basic syntax validation
-      const syntaxResult = this.validateEmailSyntax(email);
-      if (!syntaxResult.isValid) {
+      // Check database first for recent verification
+      const recentVerification = await this.getRecentVerification(email, userId);
+      if (recentVerification) {
+        console.log(`💾 Using recent database verification for ${email}`);
         return {
-          email,
-          isValid: false,
-          deliverability: 'undeliverable',
-          confidence: 0,
-          reason: syntaxResult.reason,
-          details: {
-            syntaxValid: false,
-            domainExists: false,
-            mxRecordExists: false,
-            smtpValid: false,
-            disposable: false,
-            role: false,
-            spamTrap: false,
-            toxic: false,
-          },
-          riskScore: 100
+          success: true,
+          result: this.transformDbToResult(recentVerification),
+          source: 'database',
+          cached: false
         };
       }
 
-      // Use ZeroBounce for comprehensive verification
-      try {
-        const zerobounceResult = await zerobounceService.verifyEmail(email);
-        
-        if (zerobounceResult.success) {
-          return this.mapZeroBounceResult(email, zerobounceResult.data);
-        }
-      } catch (error) {
-        console.warn(`⚠️ ZeroBounce verification failed for ${email}, falling back to basic verification:`, error);
-      }
+      // Verify through ZeroBounce
+      const startTime = Date.now();
+      const verificationResult = await zeroBounceClient.verifyEmail(email, ipAddress);
+      const processingTime = Date.now() - startTime;
 
-      // Fallback to basic verification
-      const basicResult = await this.performBasicVerification(email);
-      return basicResult;
-      
-    } catch (error) {
-      console.error(`❌ Error verifying email ${email}:`, error);
+      // Save to database
+      await this.saveVerificationToDatabase(verificationResult, userId);
+
+      // Update prospect email status if prospect exists
+      await this.updateProspectEmailStatus(email, verificationResult, userId);
+
+      console.log(`✅ Email verification completed for ${email}: ${verificationResult.status} (${processingTime}ms)`);
+
       return {
-        email,
-        isValid: false,
-        deliverability: 'unknown',
-        confidence: 0,
-        reason: 'Verification service error',
-        details: {
-          syntaxValid: true,
-          domainExists: false,
-          mxRecordExists: false,
-          smtpValid: false,
-          disposable: false,
-          role: false,
-          spamTrap: false,
-          toxic: false,
-        },
-        riskScore: 80
+        success: true,
+        result: verificationResult,
+        source: verificationResult.credits === 0 ? 'cache' : 'api',
+        cached: verificationResult.credits === 0,
+        processingTime
+      };
+
+    } catch (error: any) {
+      console.error(`❌ Email verification service error for ${email}:`, error.message);
+      return {
+        success: false,
+        error: error.message,
+        result: {
+          email,
+          status: 'error',
+          deliverabilityScore: 0,
+          riskLevel: 'high',
+          verifiedAt: new Date().toISOString(),
+          credits: 0
+        }
       };
     }
   }
 
   /**
-   * Bulk verify multiple email addresses
+   * Bulk email verification with progress tracking
    */
-  async verifyBulkEmails(emails: string[]): Promise<EmailVerificationResult[]> {
+  public async verifyBulkEmails(
+    emails: string[], 
+    userId: string, 
+    batchName?: string,
+    onProgress?: (progress: BulkProgress) => void
+  ): Promise<BulkEmailVerificationServiceResult> {
     try {
-      console.log(`🔍 Bulk verifying ${emails.length} emails`);
+      console.log(`📧 Starting bulk verification for ${emails.length} emails`);
       
-      // Process in batches to avoid overwhelming the service
-      const batchSize = 50;
-      const results: EmailVerificationResult[] = [];
+      const startTime = Date.now();
       
-      for (let i = 0; i < emails.length; i += batchSize) {
-        const batch = emails.slice(i, i + batchSize);
-        const batchPromises = batch.map(email => this.verifyEmail(email));
-        const batchResults = await Promise.all(batchPromises);
-        results.push(...batchResults);
-        
-        // Small delay between batches
-        if (i + batchSize < emails.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
+      // Create bulk verification record
+      const bulkRecord = await this.createBulkVerificationRecord(emails.length, userId, batchName);
+      
+      // Filter out recently verified emails
+      const emailsToVerify = await this.filterRecentlyVerified(emails, userId);
+      console.log(`📧 ${emailsToVerify.length}/${emails.length} emails need verification`);
+
+      // Progress callback setup
+      let processedCount = 0;
+      const reportProgress = (increment: number = 1) => {
+        processedCount += increment;
+        if (onProgress) {
+          onProgress({
+            total: emails.length,
+            processed: processedCount,
+            percentage: Math.round((processedCount / emails.length) * 100),
+            bulkId: bulkRecord.id
+          });
         }
-      }
+      };
+
+      // Perform bulk verification
+      const bulkResult = await zeroBounceClient.verifyBulkEmails(
+        emailsToVerify, 
+        userId, 
+        25 // Smaller batch size for better progress tracking
+      );
+
+      // Get cached results for skipped emails
+      const cachedResults = await this.getCachedResults(
+        emails.filter(email => !emailsToVerify.includes(email)), 
+        userId
+      );
+
+      // Combine results
+      const allResults = [...bulkResult.results, ...cachedResults];
+      const finalBulkResult = {
+        ...bulkResult,
+        totalEmails: emails.length,
+        results: allResults,
+        performance: {
+          ...bulkResult.performance,
+          processingTime: Date.now() - startTime,
+          cacheHits: bulkResult.performance.cacheHits + cachedResults.length
+        }
+      };
+
+      // Save individual verifications to database
+      await this.saveBulkVerificationsToDatabase(finalBulkResult.results, userId);
+
+      // Update bulk record
+      await this.updateBulkVerificationRecord(bulkRecord.id, finalBulkResult);
+
+      // Update prospect email statuses
+      await this.updateProspectsEmailStatuses(finalBulkResult.results, userId);
+
+      console.log(`✅ Bulk verification completed: ${finalBulkResult.validEmails}/${emails.length} valid emails`);
+
+      return {
+        success: true,
+        bulkId: bulkRecord.id,
+        result: finalBulkResult,
+        summary: this.generateBulkSummary(finalBulkResult)
+      };
+
+    } catch (error: any) {
+      console.error('❌ Bulk email verification service error:', error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Get verification history for user
+   */
+  public async getVerificationHistory(userId: string, limit: number = 50): Promise<any[]> {
+    try {
+      return await storage.getEmailVerificationHistory(userId, limit);
+    } catch (error: any) {
+      console.error('❌ Failed to get verification history:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get bulk verification history
+   */
+  public async getBulkVerificationHistory(userId: string, limit: number = 20): Promise<any[]> {
+    try {
+      return await storage.getBulkEmailVerificationHistory(userId, limit);
+    } catch (error: any) {
+      console.error('❌ Failed to get bulk verification history:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get verification statistics for user
+   */
+  public async getVerificationStats(userId: string): Promise<VerificationStats> {
+    try {
+      const stats = await storage.getEmailVerificationStats(userId);
       
-      console.log(`✅ Bulk verification completed: ${results.filter(r => r.isValid).length}/${emails.length} valid`);
-      return results;
-      
+      return {
+        totalVerifications: stats.totalVerifications || 0,
+        validEmails: stats.validEmails || 0,
+        invalidEmails: stats.invalidEmails || 0,
+        riskyEmails: stats.riskyEmails || 0,
+        unknownEmails: stats.unknownEmails || 0,
+        averageDeliverabilityScore: stats.averageScore || 0,
+        totalCreditsUsed: stats.totalCreditsUsed || 0,
+        verificationRate: stats.totalVerifications > 0 
+          ? Math.round((stats.validEmails / stats.totalVerifications) * 100) 
+          : 0,
+        lastVerification: stats.lastVerification,
+        topRiskFactors: stats.topRiskFactors || []
+      };
+    } catch (error: any) {
+      console.error('❌ Failed to get verification stats:', error.message);
+      return {
+        totalVerifications: 0,
+        validEmails: 0,
+        invalidEmails: 0,
+        riskyEmails: 0,
+        unknownEmails: 0,
+        averageDeliverabilityScore: 0,
+        totalCreditsUsed: 0,
+        verificationRate: 0,
+        topRiskFactors: []
+      };
+    }
+  }
+
+  /**
+   * Check recent verification in database
+   */
+  private async getRecentVerification(email: string, userId: string): Promise<any | null> {
+    try {
+      // Check for verification within last 24 hours
+      const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      return await storage.getRecentEmailVerification(email, userId, recentCutoff);
     } catch (error) {
-      console.error("❌ Error in bulk email verification:", error);
+      console.error('❌ Failed to check recent verification:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Save verification to database
+   */
+  private async saveVerificationToDatabase(result: EmailVerificationResult, userId: string): Promise<void> {
+    try {
+      if (result.status === 'error') return;
+
+      await storage.createEmailVerification({
+        email: result.email,
+        status: result.status,
+        subStatus: result.subStatus,
+        deliverabilityScore: result.deliverabilityScore,
+        riskLevel: result.riskLevel,
+        freeEmail: result.freeEmail,
+        disposableEmail: result.disposableEmail,
+        roleAccount: result.roleAccount,
+        toxicDomain: result.toxicDomain,
+        firstName: result.firstName,
+        lastName: result.lastName,
+        gender: result.gender,
+        location: result.location,
+        suggestion: result.suggestion,
+        mxRecord: result.mxRecord,
+        smtpProvider: result.smtp,
+        creditsUsed: result.credits,
+        userId
+      });
+    } catch (error: any) {
+      console.error('❌ Failed to save verification to database:', error.message);
+    }
+  }
+
+  /**
+   * Save bulk verifications to database
+   */
+  private async saveBulkVerificationsToDatabase(results: EmailVerificationResult[], userId: string): Promise<void> {
+    try {
+      const validResults = results.filter(r => r.status !== 'error');
+      if (validResults.length === 0) return;
+
+      await storage.createBulkEmailVerifications(
+        validResults.map(result => ({
+          email: result.email,
+          status: result.status,
+          subStatus: result.subStatus,
+          deliverabilityScore: result.deliverabilityScore,
+          riskLevel: result.riskLevel,
+          freeEmail: result.freeEmail,
+          disposableEmail: result.disposableEmail,
+          roleAccount: result.roleAccount,
+          toxicDomain: result.toxicDomain,
+          firstName: result.firstName,
+          lastName: result.lastName,
+          gender: result.gender,
+          location: result.location,
+          suggestion: result.suggestion,
+          mxRecord: result.mxRecord,
+          smtpProvider: result.smtp,
+          creditsUsed: result.credits,
+          userId
+        }))
+      );
+    } catch (error: any) {
+      console.error('❌ Failed to save bulk verifications to database:', error.message);
+    }
+  }
+
+  /**
+   * Create bulk verification record
+   */
+  private async createBulkVerificationRecord(totalEmails: number, userId: string, batchName?: string): Promise<any> {
+    try {
+      return await storage.createBulkEmailVerification({
+        batchName: batchName || `Bulk verification ${new Date().toISOString()}`,
+        totalEmails,
+        processedEmails: 0,
+        status: 'processing',
+        userId
+      });
+    } catch (error: any) {
+      console.error('❌ Failed to create bulk verification record:', error.message);
       throw error;
     }
   }
 
   /**
-   * Get email quality score (0-100)
+   * Update bulk verification record
    */
-  calculateEmailQualityScore(result: EmailVerificationResult): number {
-    let score = 100;
-    
-    if (!result.isValid) return 0;
-    
-    // Deliverability impact
-    switch (result.deliverability) {
-      case 'deliverable': score -= 0; break;
-      case 'risky': score -= 30; break;
-      case 'undeliverable': score -= 100; break;
-      case 'unknown': score -= 50; break;
+  private async updateBulkVerificationRecord(bulkId: string, result: BulkVerificationResult): Promise<void> {
+    try {
+      await storage.updateBulkEmailVerification(bulkId, {
+        processedEmails: result.processedEmails,
+        validEmails: result.validEmails,
+        invalidEmails: result.invalidEmails,
+        riskyEmails: result.risky,
+        unknownEmails: result.unknown,
+        disposableEmails: result.disposable,
+        deliverabilityRate: result.statistics.deliverabilityRate,
+        averageScore: result.statistics.averageScore,
+        totalCreditsUsed: result.performance.totalCreditsUsed,
+        cacheHits: result.performance.cacheHits,
+        apiCalls: result.performance.apiCalls,
+        processingTimeMs: result.performance.processingTime,
+        status: 'completed'
+      });
+    } catch (error: any) {
+      console.error('❌ Failed to update bulk verification record:', error.message);
     }
-    
-    // Risk factors
-    if (result.details.spamTrap) score -= 50;
-    if (result.details.toxic) score -= 40;
-    if (result.details.disposable) score -= 25;
-    if (result.details.role) score -= 15;
-    if (!result.details.smtpValid) score -= 20;
-    if (!result.details.mxRecordExists) score -= 30;
-    
-    // Provider bonus (well-known providers are generally better)
-    const goodProviders = ['gmail', 'outlook', 'yahoo', 'icloud', 'aol'];
-    if (result.provider && goodProviders.includes(result.provider.toLowerCase())) {
-      score += 5;
-    }
-    
-    return Math.max(0, Math.min(100, score));
   }
 
   /**
-   * Get ZeroBounce credits (for compatibility with existing routes)
+   * Filter recently verified emails
    */
-  async getCredits(): Promise<{ success: boolean; credits?: number; error?: string }> {
-    return await zerobounceService.getCredits();
+  private async filterRecentlyVerified(emails: string[], userId: string): Promise<string[]> {
+    try {
+      const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentlyVerified = await storage.getRecentlyVerifiedEmails(emails, userId, recentCutoff);
+      const recentEmails = new Set(recentlyVerified.map((v: any) => v.email));
+      
+      return emails.filter(email => !recentEmails.has(email));
+    } catch (error) {
+      console.error('❌ Failed to filter recently verified emails:', error);
+      return emails;
+    }
   }
 
   /**
-   * Generate email deliverability recommendations
+   * Get cached results for previously verified emails
    */
-  generateDeliverabilityRecommendations(results: EmailVerificationResult[]): {
-    overallScore: number;
-    validCount: number;
-    riskyCount: number;
-    invalidCount: number;
-    recommendations: string[];
-    issues: Array<{
-      type: string;
-      count: number;
-      impact: 'high' | 'medium' | 'low';
-      recommendation: string;
-    }>;
-  } {
-    const valid = results.filter(r => r.deliverability === 'deliverable');
-    const risky = results.filter(r => r.deliverability === 'risky');
-    const invalid = results.filter(r => r.deliverability === 'undeliverable');
-    
-    const overallScore = results.length > 0 
-      ? Math.round(results.reduce((sum, r) => sum + this.calculateEmailQualityScore(r), 0) / results.length)
-      : 0;
+  private async getCachedResults(emails: string[], userId: string): Promise<EmailVerificationResult[]> {
+    try {
+      if (emails.length === 0) return [];
+      
+      const recentCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const cachedVerifications = await storage.getRecentlyVerifiedEmails(emails, userId, recentCutoff);
+      
+      return cachedVerifications.map((v: any) => this.transformDbToResult(v));
+    } catch (error) {
+      console.error('❌ Failed to get cached results:', error);
+      return [];
+    }
+  }
 
+  /**
+   * Transform database record to verification result
+   */
+  private transformDbToResult(dbRecord: any): EmailVerificationResult {
+    return {
+      email: dbRecord.email,
+      status: dbRecord.status,
+      subStatus: dbRecord.subStatus,
+      deliverabilityScore: dbRecord.deliverabilityScore,
+      riskLevel: dbRecord.riskLevel,
+      freeEmail: dbRecord.freeEmail,
+      disposableEmail: dbRecord.disposableEmail,
+      roleAccount: dbRecord.roleAccount,
+      toxicDomain: dbRecord.toxicDomain,
+      firstName: dbRecord.firstName,
+      lastName: dbRecord.lastName,
+      gender: dbRecord.gender,
+      location: dbRecord.location,
+      suggestion: dbRecord.suggestion,
+      mxRecord: dbRecord.mxRecord,
+      smtp: dbRecord.smtpProvider,
+      verifiedAt: dbRecord.verifiedAt || dbRecord.createdAt,
+      credits: 0 // Database record means no credits used
+    };
+  }
+
+  /**
+   * Update prospect email status
+   */
+  private async updateProspectEmailStatus(
+    email: string, 
+    verification: EmailVerificationResult, 
+    userId: string
+  ): Promise<void> {
+    try {
+      await storage.updateProspectEmailStatus(email, verification.status, userId);
+    } catch (error) {
+      console.error('❌ Failed to update prospect email status:', error);
+    }
+  }
+
+  /**
+   * Update multiple prospects email statuses
+   */
+  private async updateProspectsEmailStatuses(
+    verifications: EmailVerificationResult[], 
+    userId: string
+  ): Promise<void> {
+    try {
+      const updates = verifications.map(v => ({
+        email: v.email,
+        status: v.status
+      }));
+      
+      await storage.updateProspectsEmailStatuses(updates, userId);
+    } catch (error) {
+      console.error('❌ Failed to update prospects email statuses:', error);
+    }
+  }
+
+  /**
+   * Generate bulk verification summary
+   */
+  private generateBulkSummary(result: BulkVerificationResult): BulkSummary {
+    return {
+      totalProcessed: result.processedEmails,
+      validEmails: result.validEmails,
+      invalidEmails: result.invalidEmails,
+      riskyEmails: result.risky,
+      unknownEmails: result.unknown,
+      disposableEmails: result.disposable,
+      deliverabilityRate: result.statistics.deliverabilityRate,
+      averageScore: result.statistics.averageScore,
+      creditsUsed: result.performance.totalCreditsUsed,
+      processingTime: result.performance.processingTime,
+      recommendations: this.generateRecommendations(result)
+    };
+  }
+
+  /**
+   * Generate recommendations based on verification results
+   */
+  private generateRecommendations(result: BulkVerificationResult): string[] {
     const recommendations: string[] = [];
-    const issues: any[] = [];
-
-    // Analyze common issues
-    const spamTraps = results.filter(r => r.details.spamTrap).length;
-    const disposableEmails = results.filter(r => r.details.disposable).length;
-    const roleEmails = results.filter(r => r.details.role).length;
-    const syntaxErrors = results.filter(r => !r.details.syntaxValid).length;
-
-    if (spamTraps > 0) {
-      issues.push({
-        type: 'spam_traps',
-        count: spamTraps,
-        impact: 'high' as const,
-        recommendation: 'Remove spam trap emails immediately to protect sender reputation'
-      });
-      recommendations.push('Remove all identified spam trap emails from your list');
+    
+    if (result.statistics.deliverabilityRate < 70) {
+      recommendations.push('Consider cleaning your email list to improve deliverability');
     }
-
-    if (disposableEmails > results.length * 0.1) {
-      issues.push({
-        type: 'disposable_emails',
-        count: disposableEmails,
-        impact: 'medium' as const,
-        recommendation: 'Consider removing disposable email addresses for better engagement'
-      });
-      recommendations.push('Filter out disposable email addresses for higher quality');
+    
+    if (result.disposable > result.totalEmails * 0.1) {
+      recommendations.push('High number of disposable emails detected - implement better signup validation');
     }
-
-    if (roleEmails > results.length * 0.2) {
-      issues.push({
-        type: 'role_emails',
-        count: roleEmails,
-        impact: 'medium' as const,
-        recommendation: 'Role-based emails typically have lower engagement rates'
-      });
-      recommendations.push('Consider segmenting role-based emails separately');
+    
+    if (result.risky > result.totalEmails * 0.2) {
+      recommendations.push('Many risky emails found - consider additional verification steps');
     }
-
-    if (syntaxErrors > 0) {
-      issues.push({
-        type: 'syntax_errors',
-        count: syntaxErrors,
-        impact: 'high' as const,
-        recommendation: 'Fix syntax errors to prevent bounce issues'
-      });
-      recommendations.push('Clean up email addresses with syntax errors');
+    
+    if (result.statistics.averageScore < 60) {
+      recommendations.push('Low average deliverability score - focus on list quality over quantity');
     }
-
-    // Overall recommendations based on score
-    if (overallScore < 70) {
-      recommendations.push('Your email list needs significant cleaning before sending campaigns');
-    } else if (overallScore < 85) {
-      recommendations.push('Consider additional list cleaning to improve deliverability');
-    } else {
-      recommendations.push('Your email list quality is good - ready for campaigns');
-    }
-
-    return {
-      overallScore,
-      validCount: valid.length,
-      riskyCount: risky.length,
-      invalidCount: invalid.length,
-      recommendations,
-      issues
-    };
+    
+    return recommendations;
   }
 
   /**
-   * Validate email syntax
+   * Get service health status
    */
-  private validateEmailSyntax(email: string): { isValid: boolean; reason?: string } {
-    // Basic regex validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    
-    if (!emailRegex.test(email)) {
-      return { isValid: false, reason: 'Invalid email format' };
-    }
-    
-    // Check for common syntax issues
-    if (email.length > 254) {
-      return { isValid: false, reason: 'Email address too long' };
-    }
-    
-    const [localPart, domain] = email.split('@');
-    
-    if (localPart.length > 64) {
-      return { isValid: false, reason: 'Local part too long' };
-    }
-    
-    if (domain.length > 253) {
-      return { isValid: false, reason: 'Domain too long' };
-    }
-    
-    // Check for consecutive dots
-    if (email.includes('..')) {
-      return { isValid: false, reason: 'Consecutive dots not allowed' };
-    }
-    
-    // Check for invalid characters
-    const invalidChars = /[<>()[\]\\,;:\s@"]/g;
-    if (invalidChars.test(localPart.replace(/"/g, ''))) {
-      return { isValid: false, reason: 'Invalid characters in email' };
-    }
-    
-    return { isValid: true };
-  }
+  public async getHealthStatus(): Promise<ServiceHealthStatus> {
+    try {
+      const [zeroBounceHealth, credits] = await Promise.all([
+        zeroBounceClient.healthCheck(),
+        zeroBounceClient.getAccountCredits()
+      ]);
 
-  /**
-   * Perform basic email verification without external services
-   */
-  private async performBasicVerification(email: string): Promise<EmailVerificationResult> {
-    const [localPart, domain] = email.split('@');
-    
-    // Check for common disposable email providers
-    const disposableProviders = [
-      '10minutemail.com', 'tempmail.org', 'guerrillamail.com', 'mailinator.com',
-      'yopmail.com', 'temp-mail.org', 'throwaway.email'
-    ];
-    
-    const isDisposable = disposableProviders.some(provider => 
-      domain.toLowerCase().includes(provider)
-    );
-    
-    // Check for role-based emails
-    const roleKeywords = ['admin', 'info', 'support', 'sales', 'marketing', 'noreply', 'no-reply'];
-    const isRole = roleKeywords.some(keyword => 
-      localPart.toLowerCase().includes(keyword)
-    );
-    
-    // Determine provider
-    const provider = this.getEmailProvider(domain);
-    
-    // Basic risk assessment
-    let riskScore = 20; // Base risk
-    if (isDisposable) riskScore += 40;
-    if (isRole) riskScore += 15;
-    if (!provider) riskScore += 25; // Unknown provider
-    
-    const deliverability = riskScore > 60 ? 'risky' : 'deliverable';
-    
-    return {
-      email,
-      isValid: true,
-      deliverability,
-      confidence: Math.max(40, 100 - riskScore),
-      details: {
-        syntaxValid: true,
-        domainExists: true, // Assume true for basic verification
-        mxRecordExists: true, // Assume true for basic verification
-        smtpValid: false, // Cannot verify without SMTP check
-        disposable: isDisposable,
-        role: isRole,
-        spamTrap: false, // Cannot detect without service
-        toxic: false,
-      },
-      provider,
-      riskScore
-    };
-  }
-
-  /**
-   * Map ZeroBounce result to our format
-   */
-  private mapZeroBounceResult(email: string, zbResult: any): EmailVerificationResult {
-    const deliverabilityMap: Record<string, 'deliverable' | 'undeliverable' | 'risky' | 'unknown'> = {
-      'valid': 'deliverable',
-      'invalid': 'undeliverable',
-      'catch-all': 'risky',
-      'unknown': 'unknown',
-      'spamtrap': 'undeliverable',
-      'abuse': 'undeliverable',
-      'do_not_mail': 'undeliverable'
-    };
-    
-    return {
-      email,
-      isValid: zbResult.status === 'valid',
-      deliverability: deliverabilityMap[zbResult.status] || 'unknown',
-      confidence: Math.max(0, Math.min(100, 100 - (zbResult.sub_status === 'possible_typo' ? 30 : 0))),
-      reason: zbResult.sub_status,
-      details: {
-        syntaxValid: zbResult.status !== 'invalid',
-        domainExists: zbResult.mx_found === 'true',
-        mxRecordExists: zbResult.mx_found === 'true',
-        smtpValid: zbResult.smtp_provider !== null,
-        disposable: zbResult.disposable === 'true',
-        role: zbResult.role === 'true',
-        spamTrap: zbResult.status === 'spamtrap',
-        toxic: zbResult.toxic === 'true',
-      },
-      provider: this.getEmailProvider(email.split('@')[1]),
-      riskScore: this.calculateRiskScore(zbResult)
-    };
-  }
-
-  /**
-   * Get email provider from domain
-   */
-  private getEmailProvider(domain: string): string | undefined {
-    const providerMap: Record<string, string> = {
-      'gmail.com': 'gmail',
-      'googlemail.com': 'gmail',
-      'outlook.com': 'outlook',
-      'hotmail.com': 'outlook',
-      'live.com': 'outlook',
-      'msn.com': 'outlook',
-      'yahoo.com': 'yahoo',
-      'yahoo.co.uk': 'yahoo',
-      'ymail.com': 'yahoo',
-      'icloud.com': 'icloud',
-      'me.com': 'icloud',
-      'mac.com': 'icloud',
-      'aol.com': 'aol',
-    };
-    
-    return providerMap[domain.toLowerCase()];
-  }
-
-  /**
-   * Calculate risk score from ZeroBounce result
-   */
-  private calculateRiskScore(zbResult: any): number {
-    let risk = 0;
-    
-    if (zbResult.status === 'invalid') risk += 100;
-    else if (zbResult.status === 'spamtrap') risk += 100;
-    else if (zbResult.status === 'abuse') risk += 90;
-    else if (zbResult.status === 'do_not_mail') risk += 80;
-    else if (zbResult.status === 'catch-all') risk += 40;
-    else if (zbResult.status === 'unknown') risk += 60;
-    
-    if (zbResult.disposable === 'true') risk += 30;
-    if (zbResult.toxic === 'true') risk += 40;
-    if (zbResult.role === 'true') risk += 15;
-    if (zbResult.mx_found === 'false') risk += 50;
-    
-    return Math.min(100, risk);
+      return {
+        healthy: zeroBounceHealth,
+        configured: zeroBounceClient.getStatus().configured,
+        credits: credits.credits,
+        lastCheck: new Date().toISOString()
+      };
+    } catch (error: any) {
+      return {
+        healthy: false,
+        configured: false,
+        credits: 0,
+        error: error.message,
+        lastCheck: new Date().toISOString()
+      };
+    }
   }
 }
 
-export const emailVerificationService = new EmailVerificationService();
+// Types
+export interface EmailVerificationServiceResult {
+  success: boolean;
+  result: EmailVerificationResult;
+  source?: string;
+  cached?: boolean;
+  processingTime?: number;
+  error?: string;
+}
+
+export interface BulkEmailVerificationServiceResult {
+  success: boolean;
+  bulkId?: string;
+  result?: BulkVerificationResult;
+  summary?: BulkSummary;
+  error?: string;
+}
+
+export interface BulkProgress {
+  total: number;
+  processed: number;
+  percentage: number;
+  bulkId: string;
+}
+
+export interface BulkSummary {
+  totalProcessed: number;
+  validEmails: number;
+  invalidEmails: number;
+  riskyEmails: number;
+  unknownEmails: number;
+  disposableEmails: number;
+  deliverabilityRate: number;
+  averageScore: number;
+  creditsUsed: number;
+  processingTime: number;
+  recommendations: string[];
+}
+
+export interface VerificationStats {
+  totalVerifications: number;
+  validEmails: number;
+  invalidEmails: number;
+  riskyEmails: number;
+  unknownEmails: number;
+  averageDeliverabilityScore: number;
+  totalCreditsUsed: number;
+  verificationRate: number;
+  lastVerification?: string;
+  topRiskFactors: string[];
+}
+
+export interface ServiceHealthStatus {
+  healthy: boolean;
+  configured: boolean;
+  credits: number;
+  lastCheck: string;
+  error?: string;
+}
+
+// Export singleton instance
+export const emailVerificationService = EmailVerificationService.getInstance();

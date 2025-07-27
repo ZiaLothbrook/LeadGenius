@@ -5,6 +5,8 @@ import {
   messages,
   campaignProspects,
   analytics,
+  emailVerifications,
+  bulkEmailVerifications,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -18,6 +20,10 @@ import {
   type InsertCampaignProspect,
   type Analytics,
   type InsertAnalytics,
+  type EmailVerification,
+  type InsertEmailVerification,
+  type BulkEmailVerification,
+  type InsertBulkEmailVerification,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql } from "drizzle-orm";
@@ -68,6 +74,19 @@ export interface IStorage {
   getAnalytics(userId: string, filters?: any): Promise<Analytics[]>;
   createAnalytics(analytics: InsertAnalytics): Promise<Analytics>;
   getDashboardStats(userId: string): Promise<any>;
+
+  // Email Verification operations (CARD-013)
+  createEmailVerification(verification: InsertEmailVerification): Promise<EmailVerification>;
+  createBulkEmailVerifications(verifications: InsertEmailVerification[]): Promise<void>;
+  getEmailVerificationHistory(userId: string, limit?: number): Promise<EmailVerification[]>;
+  getBulkEmailVerificationHistory(userId: string, limit?: number): Promise<BulkEmailVerification[]>;
+  getEmailVerificationStats(userId: string): Promise<any>;
+  getRecentEmailVerification(email: string, userId: string, cutoff: Date): Promise<EmailVerification | null>;
+  getRecentlyVerifiedEmails(emails: string[], userId: string, cutoff: Date): Promise<EmailVerification[]>;
+  createBulkEmailVerification(bulk: InsertBulkEmailVerification): Promise<BulkEmailVerification>;
+  updateBulkEmailVerification(id: string, updates: Partial<BulkEmailVerification>): Promise<BulkEmailVerification>;
+  updateProspectEmailStatus(email: string, status: string, userId: string): Promise<void>;
+  updateProspectsEmailStatuses(updates: { email: string; status: string }[], userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -372,6 +391,180 @@ export class DatabaseStorage implements IStorage {
       responseRate: sent > 0 ? ((replied / sent) * 100).toFixed(1) : "0.0",
       conversionRate: sent > 0 ? ((converted / sent) * 100).toFixed(1) : "0.0",
     };
+  }
+
+  // Email Verification operations (CARD-013)
+  async createEmailVerification(verification: InsertEmailVerification): Promise<EmailVerification> {
+    const [result] = await db
+      .insert(emailVerifications)
+      .values({
+        ...verification,
+        verifiedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    return result;
+  }
+
+  async createBulkEmailVerifications(verifications: InsertEmailVerification[]): Promise<void> {
+    if (verifications.length === 0) return;
+    
+    const now = new Date();
+    const verificationData = verifications.map(v => ({
+      ...v,
+      verifiedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    }));
+
+    await db.insert(emailVerifications).values(verificationData);
+  }
+
+  async getEmailVerificationHistory(userId: string, limit: number = 50): Promise<EmailVerification[]> {
+    return await db
+      .select()
+      .from(emailVerifications)
+      .where(eq(emailVerifications.userId, userId))
+      .orderBy(desc(emailVerifications.createdAt))
+      .limit(limit);
+  }
+
+  async getBulkEmailVerificationHistory(userId: string, limit: number = 20): Promise<BulkEmailVerification[]> {
+    return await db
+      .select()
+      .from(bulkEmailVerifications)
+      .where(eq(bulkEmailVerifications.userId, userId))
+      .orderBy(desc(bulkEmailVerifications.createdAt))
+      .limit(limit);
+  }
+
+  async getEmailVerificationStats(userId: string): Promise<any> {
+    // Get verification stats
+    const stats = await db
+      .select({
+        totalVerifications: sql<number>`count(*)`,
+        validEmails: sql<number>`sum(case when status = 'valid' then 1 else 0 end)`,
+        invalidEmails: sql<number>`sum(case when status = 'invalid' then 1 else 0 end)`,
+        riskyEmails: sql<number>`sum(case when status = 'risky' then 1 else 0 end)`,
+        unknownEmails: sql<number>`sum(case when status = 'unknown' then 1 else 0 end)`,
+        averageScore: sql<number>`avg(deliverability_score)`,
+        totalCreditsUsed: sql<number>`sum(credits_used)`,
+        lastVerification: sql<string>`max(verified_at)`,
+      })
+      .from(emailVerifications)
+      .where(eq(emailVerifications.userId, userId));
+
+    // Get top risk factors
+    const riskFactors = await db
+      .select({
+        factor: sql<string>`
+          case 
+            when disposable_email = true then 'Disposable Email'
+            when toxic_domain = true then 'Toxic Domain'
+            when role_account = true then 'Role Account'
+            when free_email = true then 'Free Email'
+            else 'Other'
+          end
+        `,
+        count: sql<number>`count(*)`
+      })
+      .from(emailVerifications)
+      .where(and(
+        eq(emailVerifications.userId, userId),
+        sql`(disposable_email = true OR toxic_domain = true OR role_account = true OR free_email = true)`
+      ))
+      .groupBy(sql`
+        case 
+          when disposable_email = true then 'Disposable Email'
+          when toxic_domain = true then 'Toxic Domain'
+          when role_account = true then 'Role Account'
+          when free_email = true then 'Free Email'
+          else 'Other'
+        end
+      `)
+      .orderBy(sql`count(*) desc`)
+      .limit(5);
+
+    return {
+      ...stats[0],
+      topRiskFactors: riskFactors.map(rf => rf.factor)
+    };
+  }
+
+  async getRecentEmailVerification(email: string, userId: string, cutoff: Date): Promise<EmailVerification | null> {
+    const [result] = await db
+      .select()
+      .from(emailVerifications)
+      .where(and(
+        eq(emailVerifications.email, email),
+        eq(emailVerifications.userId, userId),
+        sql`verified_at >= ${cutoff}`
+      ))
+      .orderBy(desc(emailVerifications.verifiedAt))
+      .limit(1);
+    
+    return result || null;
+  }
+
+  async getRecentlyVerifiedEmails(emails: string[], userId: string, cutoff: Date): Promise<EmailVerification[]> {
+    if (emails.length === 0) return [];
+    
+    return await db
+      .select()
+      .from(emailVerifications)
+      .where(and(
+        sql`email = ANY(${emails})`,
+        eq(emailVerifications.userId, userId),
+        sql`verified_at >= ${cutoff}`
+      ))
+      .orderBy(desc(emailVerifications.verifiedAt));
+  }
+
+  async createBulkEmailVerification(bulk: InsertBulkEmailVerification): Promise<BulkEmailVerification> {
+    const [result] = await db
+      .insert(bulkEmailVerifications)
+      .values({
+        ...bulk,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    return result;
+  }
+
+  async updateBulkEmailVerification(id: string, updates: Partial<BulkEmailVerification>): Promise<BulkEmailVerification> {
+    const [result] = await db
+      .update(bulkEmailVerifications)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(bulkEmailVerifications.id, id))
+      .returning();
+    return result;
+  }
+
+  async updateProspectEmailStatus(email: string, status: string, userId: string): Promise<void> {
+    await db
+      .update(prospects)
+      .set({
+        emailStatus: status,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(prospects.email, email),
+        eq(prospects.userId, userId)
+      ));
+  }
+
+  async updateProspectsEmailStatuses(updates: { email: string; status: string }[], userId: string): Promise<void> {
+    if (updates.length === 0) return;
+
+    // Use a transaction for batch updates
+    for (const update of updates) {
+      await this.updateProspectEmailStatus(update.email, update.status, userId);
+    }
   }
 }
 
