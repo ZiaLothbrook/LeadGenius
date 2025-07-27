@@ -17,7 +17,8 @@ import {
   Target,
   Calendar,
   Activity,
-  Shield
+  Shield,
+  MessageSquare
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -53,6 +54,11 @@ const navItems = [
     name: "Message Optimization",
     href: "/message-optimization",
     icon: Target,
+  },
+  {
+    name: "AI Message Generation",
+    href: "/message-generation",
+    icon: MessageSquare,
   },
   {
     name: "Campaign Scheduling",

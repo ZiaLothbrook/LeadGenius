@@ -11,7 +11,7 @@ from fastapi.responses import RedirectResponse
 import uvicorn
 from database import database, engine
 from models import Base
-from routers import auth, prospects, campaigns, analytics, admin
+from routers import auth, prospects, campaigns, analytics, admin, message_generation
 from services.redis_service import redis_client
 from services.celery_app import celery_app
 import redis
@@ -81,6 +81,7 @@ app.include_router(prospects.router, prefix="/api/prospects", tags=["Prospects"]
 app.include_router(campaigns.router, prefix="/api/campaigns", tags=["Campaigns"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(message_generation.router, prefix="/api/messages", tags=["AI Message Generation"])
 
 @app.get("/")
 async def root():
