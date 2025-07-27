@@ -326,9 +326,15 @@ export class ApiRateLimiter {
     action?: string;
   }>> {
     try {
-      const recommendations = [];
+      const recommendations: Array<{
+        type: 'warning' | 'info' | 'success';
+        api: string;
+        message: string;
+        potentialSavings?: number;
+        action?: string;
+      }> = [];
 
-      Array.from(this.apiConfigs.entries()).forEach(([apiName, config]) => {
+      for (const [apiName, config] of this.apiConfigs.entries()) {
         const metrics = await this.getCostMetrics(userId, apiName);
 
         // Budget utilization warnings
@@ -370,7 +376,7 @@ export class ApiRateLimiter {
             potentialSavings: metrics.savingsFromCache
           });
         }
-      });
+      }
 
       return recommendations.sort((a, b) => {
         const priority = { warning: 3, info: 2, success: 1 };

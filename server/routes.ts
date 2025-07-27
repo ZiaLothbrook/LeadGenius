@@ -2112,6 +2112,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('❌ Failed to register API rate limiting routes:', error);
   }
 
+  // CARD-007: Prospect Search Engine Routes
+  try {
+    const searchModule = await import('./routes/prospectSearchRoutes.js');
+    searchModule.registerProspectSearchRoutes(app);
+    console.log('🔍 Prospect search engine routes configured');
+  } catch (error) {
+    console.error('❌ Failed to register prospect search routes:', error);
+  }
+
+  // CARD-007: Test Routes (Development Only)
+  try {
+    const testModule = await import('./routes/prospectSearchTestRoutes.js');
+    testModule.registerProspectSearchTestRoutes(app);
+    console.log('🧪 Prospect search test routes configured');
+  } catch (error) {
+    console.error('❌ Failed to register prospect search test routes:', error);
+  }
+
   const httpServer = createServer(app);
   return httpServer;
 }
