@@ -497,11 +497,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Generate personalized message using new MessageGenerationService
-      const result = await messageGenerationService.generatePersonalizedMessage(
+      const messageRequest = {
         prospect,
         campaignContext,
-        messageOptions
-      );
+        messageOptions: {
+          ...messageOptions,
+          templateType: messageOptions.templateType || "cold-email"
+        }
+      };
+      
+      const result = await messageGenerationService.generateMessage(messageRequest);
 
       // Save the main message to database
       const savedMessage = await storage.createMessage({

@@ -207,9 +207,9 @@ Return the response in JSON format:
 }`;
 
     try {
-      const response = await this.aiService.generatePersonalizedMessage(prompt, {
+      const response = await this.aiService.generateStructuredMessage(prompt, {
         tone: request.messageOptions.tone,
-        model: "anthropic/claude-3.5-sonnet-20241022",
+        maxTokens: 1500,
       });
       
       const parsed = this.parseJSONResponse(response);
@@ -238,9 +238,8 @@ Body: ${mainMessage.body}
 Return as JSON: { "subject": "...", "body": "..." }`;
     
     try {
-      const shorterResponse = await this.aiService.generatePersonalizedMessage(shorterPrompt, {
+      const shorterResponse = await this.aiService.generateStructuredMessage(shorterPrompt, {
         tone: request.messageOptions.tone,
-        model: "anthropic/claude-3.5-sonnet-20241022",
       });
       
       const parsed = this.parseJSONResponse(shorterResponse);
@@ -263,9 +262,8 @@ Keep the same goal but try a different opening and value proposition approach.
 Return as JSON: { "subject": "...", "body": "..." }`;
     
     try {
-      const altResponse = await this.aiService.generatePersonalizedMessage(alternativePrompt, {
+      const altResponse = await this.aiService.generateStructuredMessage(alternativePrompt, {
         tone: request.messageOptions.tone,
-        model: "anthropic/claude-3.5-sonnet-20241022",
       });
       
       const parsed = this.parseJSONResponse(altResponse);

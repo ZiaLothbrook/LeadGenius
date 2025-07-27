@@ -11,7 +11,9 @@ interface OpenRouterResponse {
 // Available models with their capabilities
 const MODELS = {
   // Anthropic models - best for reasoning and analysis
-  CLAUDE_SONNET: "anthropic/claude-3.5-sonnet",
+  // The newest Anthropic model is "claude-sonnet-4-20250514", not "claude-3-5-sonnet-20241022" 
+  CLAUDE_SONNET_4: "anthropic/claude-sonnet-4-20250514",
+  CLAUDE_SONNET: "anthropic/claude-3-5-sonnet-20241022",
   CLAUDE_HAIKU: "anthropic/claude-3-haiku",
   
   // Google models - good for structured output
@@ -102,7 +104,25 @@ class OpenRouterService {
       }
     ];
 
-    return this.makeRequest(MODELS.CLAUDE_SONNET, messages, systemPrompt);
+    return this.makeRequest(MODELS.CLAUDE_SONNET_4, messages, systemPrompt);
+  }
+
+  // Enhanced message generation with structured output
+  async generateStructuredMessage(
+    prompt: string,
+    options: {
+      tone: "professional" | "casual" | "friendly" | "executive";
+      model?: string;
+      maxTokens?: number;
+    }
+  ): Promise<string> {
+    const model = options.model || MODELS.CLAUDE_SONNET_4;
+    const systemPrompt = `You are an expert sales copywriter. Generate responses in valid JSON format.
+    Use a ${options.tone} tone and ensure all content is professional and compelling.`;
+
+    return this.makeRequest(model, [
+      { role: "user", content: prompt }
+    ], systemPrompt);
   }
 
   // Enrich prospect data using Gemini for structured output
@@ -162,13 +182,13 @@ class OpenRouterService {
       // Validate response structure
       const enrichmentSchema = z.object({
         enrichedData: z.object({
-          industry: z.string().nullable().optional(),
-          companySize: z.enum(["1-10", "11-50", "51-200", "200+"]).nullable().optional(),
-          location: z.string().nullable().optional(),
-          phone: z.string().nullable().optional(),
-          linkedinUrl: z.string().url().nullable().optional(),
+          industry: z.string().optional(),
+          companySize: z.enum(["1-10", "11-50", "51-200", "200+"]).optional(),
+          location: z.string().optional(),
+          phone: z.string().optional(),
+          linkedinUrl: z.string().url().optional(),
           technologies: z.array(z.string()).optional(),
-          recentNews: z.string().nullable().optional(),
+          recentNews: z.string().optional(),
         }),
         confidence: z.number().min(0).max(1),
       });
