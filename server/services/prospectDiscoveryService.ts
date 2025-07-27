@@ -434,32 +434,63 @@ export class ProspectDiscoveryService {
     const uniqueProspects = new Map<string, UnifiedProspect>();
 
     prospects.forEach(prospect => {
-      // Create a unique key based on email or name + company
-      const key = prospect.email || `${prospect.name}-${prospect.company}`.toLowerCase();
+      // Create a more specific unique key to avoid false positives
+      // Only deduplicate if we have a confirmed match (email + name) or (id from same source)
+      let key: string;
+      
+      if (prospect.email && prospect.email.trim() !== '') {
+        // If we have an email, use email + name as the key (most reliable)
+        key = `${prospect.email.toLowerCase()}-${prospect.name.toLowerCase()}`;
+      } else if (prospect.id && prospect.sources.length === 1) {
+        // If no email but we have a source-specific ID, use that with source
+        key = `${prospect.sources[0]}-${prospect.id}`;
+      } else {
+        // Fallback: use name + company + title for more specificity
+        key = `${prospect.name.toLowerCase()}-${prospect.company.toLowerCase()}-${prospect.title.toLowerCase()}`;
+      }
       
       if (uniqueProspects.has(key)) {
-        // Merge data from multiple sources
+        // Only merge if it's truly the same person
         const existing = uniqueProspects.get(key)!;
-        existing.sources = [...new Set([...existing.sources, ...prospect.sources])];
-        existing.dataQuality = Math.max(existing.dataQuality, prospect.dataQuality);
         
-        // Merge enrichment data
-        if (prospect.enrichmentData) {
-          existing.enrichmentData = {
-            ...existing.enrichmentData,
-            ...prospect.enrichmentData,
-          };
+        // Verify it's actually the same person before merging
+        const isSamePerson = (
+          prospect.email && existing.email && prospect.email.toLowerCase() === existing.email.toLowerCase()
+        ) || (
+          prospect.name.toLowerCase() === existing.name.toLowerCase() && 
+          prospect.company.toLowerCase() === existing.company.toLowerCase() &&
+          prospect.title.toLowerCase() === existing.title.toLowerCase()
+        );
+        
+        if (isSamePerson) {
+          // Merge data from multiple sources
+          existing.sources = [...new Set([...existing.sources, ...prospect.sources])];
+          existing.dataQuality = Math.max(existing.dataQuality, prospect.dataQuality);
+          
+          // Merge enrichment data
+          if (prospect.enrichmentData) {
+            existing.enrichmentData = {
+              ...existing.enrichmentData,
+              ...prospect.enrichmentData,
+            };
+          }
+          
+          // Fill in missing fields with better data
+          if (!existing.phone && prospect.phone) existing.phone = prospect.phone;
+          if (!existing.linkedinUrl && prospect.linkedinUrl) existing.linkedinUrl = prospect.linkedinUrl;
+          if (!existing.industry && prospect.industry) existing.industry = prospect.industry;
+          if (!existing.email && prospect.email) existing.email = prospect.email;
+        } else {
+          // Different people with similar keys - create a unique key for the second one
+          const uniqueKey = `${key}-${prospect.id || Date.now()}-${Math.random()}`;
+          uniqueProspects.set(uniqueKey, { ...prospect });
         }
-        
-        // Fill in missing fields
-        if (!existing.phone && prospect.phone) existing.phone = prospect.phone;
-        if (!existing.linkedinUrl && prospect.linkedinUrl) existing.linkedinUrl = prospect.linkedinUrl;
-        if (!existing.industry && prospect.industry) existing.industry = prospect.industry;
       } else {
         uniqueProspects.set(key, { ...prospect });
       }
     });
 
+    console.log(`🔄 Deduplication: ${prospects.length} → ${uniqueProspects.size} prospects`);
     return Array.from(uniqueProspects.values());
   }
 
