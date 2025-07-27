@@ -12,6 +12,7 @@ export interface EmailOptions {
   tag?: string;
   trackOpens?: boolean;
   trackLinks?: 'None' | 'HtmlAndText' | 'HtmlOnly' | 'TextOnly';
+  userId?: string; // For user-specific servers
 }
 
 export interface EmailResult {
@@ -30,33 +31,98 @@ export interface BulkEmailResult {
 }
 
 class PostmarkService {
-  private client: postmark.ServerClient | null = null;
-  private apiKey: string | undefined;
+  private defaultClient: postmark.ServerClient | null = null;
+  private defaultApiKey: string | undefined;
   private defaultFromEmail: string;
   private defaultFromName: string;
+  private userClients: Map<string, postmark.ServerClient> = new Map();
 
   constructor() {
-    this.apiKey = process.env.POSTMARK_API_KEY;
+    this.defaultApiKey = process.env.POSTMARK_API_KEY;
     this.defaultFromEmail = process.env.POSTMARK_FROM_EMAIL || 'noreply@leadgen.ai';
     this.defaultFromName = process.env.POSTMARK_FROM_NAME || 'AI Lead Generation Platform';
 
-    if (this.apiKey) {
-      this.client = new postmark.ServerClient(this.apiKey);
-      console.log('✅ Postmark email service initialized');
+    if (this.defaultApiKey) {
+      this.defaultClient = new postmark.ServerClient(this.defaultApiKey);
+      console.log('✅ Postmark email service initialized with default server');
     } else {
-      console.warn('⚠️  POSTMARK_API_KEY not configured - email functionality disabled');
+      console.warn('⚠️  POSTMARK_API_KEY not configured - using user-specific servers only');
+    }
+  }
+
+  /**
+   * Get or create a Postmark client for a specific user
+   */
+  private async getUserClient(userId?: string): Promise<postmark.ServerClient | null> {
+    // If no userId provided, use default client
+    if (!userId) {
+      return this.defaultClient;
+    }
+
+    // Check if we already have a client for this user
+    if (this.userClients.has(userId)) {
+      return this.userClients.get(userId)!;
+    }
+
+    // Try to get user's server configuration
+    try {
+      const { storage } = await import('../storage');
+      const user = await storage.getUser(userId);
+      
+      if (user?.postmarkServerToken) {
+        const client = new postmark.ServerClient(user.postmarkServerToken);
+        this.userClients.set(userId, client);
+        console.log(`✅ Created Postmark client for user ${userId} with dedicated server`);
+        return client;
+      }
+    } catch (error) {
+      console.error(`Failed to get user-specific Postmark client for ${userId}:`, error);
+    }
+
+    // Fallback to default client
+    return this.defaultClient;
+  }
+
+  /**
+   * Get user's email configuration (from address, name, etc.)
+   */
+  private async getUserEmailConfig(userId?: string) {
+    if (!userId) {
+      return {
+        fromEmail: this.defaultFromEmail,
+        fromName: this.defaultFromName
+      };
+    }
+
+    try {
+      const { storage } = await import('../storage');
+      const user = await storage.getUser(userId);
+      
+      return {
+        fromEmail: user?.postmarkFromEmail || user?.email || this.defaultFromEmail,
+        fromName: user?.postmarkFromName || `${user?.firstName || 'Lead'} ${user?.lastName || 'Generation'}` || this.defaultFromName
+      };
+    } catch (error) {
+      console.error(`Failed to get user email config for ${userId}:`, error);
+      return {
+        fromEmail: this.defaultFromEmail,
+        fromName: this.defaultFromName
+      };
     }
   }
 
   async sendEmail(options: EmailOptions): Promise<EmailResult> {
-    if (!this.client) {
+    const client = await this.getUserClient(options.userId);
+    if (!client) {
       console.warn('Postmark not configured - email not sent');
       return this.getMockEmailResult(options);
     }
 
+    const emailConfig = await this.getUserEmailConfig(options.userId);
+
     try {
       const emailData: postmark.Models.Message = {
-        From: `${options.fromName || this.defaultFromName} <${options.from || this.defaultFromEmail}>`,
+        From: `${options.fromName || emailConfig.fromName} <${options.from || emailConfig.fromEmail}>`,
         To: options.to,
         Subject: options.subject,
         HtmlBody: options.htmlContent,
@@ -75,10 +141,9 @@ class PostmarkService {
           TemplateModel: options.templateData,
           Tag: emailData.Tag,
           TrackOpens: emailData.TrackOpens,
-          TrackLinks: emailData.TrackLinks,
         };
 
-        const response = await this.client.sendEmailWithTemplate(templateData);
+        const response = await client.sendEmailWithTemplate(templateData);
         
         return {
           messageId: response.MessageID,
@@ -87,7 +152,7 @@ class PostmarkService {
           submittedAt: new Date(response.SubmittedAt),
         };
       } else {
-        const response = await this.client.sendEmail(emailData);
+        const response = await client.sendEmail(emailData);
         
         return {
           messageId: response.MessageID,
@@ -115,30 +180,37 @@ class PostmarkService {
   }
 
   async sendBulkEmails(emails: EmailOptions[]): Promise<BulkEmailResult> {
-    if (!this.client) {
-      console.warn('Postmark not configured - bulk emails not sent');
-      const details = emails.map(email => this.getMockEmailResult(email));
-      return {
-        successful: details.length,
-        failed: 0,
-        total: emails.length,
-        details,
-      };
+    // Group emails by userId to use appropriate client
+    const emailsByUser = new Map<string, EmailOptions[]>();
+    
+    for (const email of emails) {
+      const userId = email.userId || 'default';
+      if (!emailsByUser.has(userId)) {
+        emailsByUser.set(userId, []);
+      }
+      emailsByUser.get(userId)!.push(email);
     }
 
-    const results: EmailResult[] = [];
+    const allDetails: EmailResult[] = [];
     let successful = 0;
     let failed = 0;
 
-    // Postmark supports batch sending up to 500 emails
-    const batchSize = 500;
-    
-    for (let i = 0; i < emails.length; i += batchSize) {
-      const batch = emails.slice(i, i + batchSize);
-      
+    // Process emails by user group
+    for (const [userId, userEmails] of emailsByUser) {
+      const client = await this.getUserClient(userId === 'default' ? undefined : userId);
+      if (!client) {
+        // Add mock results for failed emails
+        const mockDetails = userEmails.map(email => this.getMockEmailResult(email));
+        allDetails.push(...mockDetails);
+        failed += userEmails.length;
+        continue;
+      }
+
+      const emailConfig = await this.getUserEmailConfig(userId === 'default' ? undefined : userId);
+
       try {
-        const emailBatch = batch.map(options => ({
-          From: `${options.fromName || this.defaultFromName} <${options.from || this.defaultFromEmail}>`,
+        const emailBatch = userEmails.map(options => ({
+          From: `${options.fromName || emailConfig.fromName} <${options.from || emailConfig.fromEmail}>`,
           To: options.to,
           Subject: options.subject,
           HtmlBody: options.htmlContent,
@@ -147,13 +219,13 @@ class PostmarkService {
           TrackOpens: options.trackOpens !== false,
         }));
 
-        const responses = await this.client.sendEmailBatch(emailBatch);
+        const responses = await client.sendEmailBatch(emailBatch);
         
         responses.forEach((response, index) => {
-          const originalEmail = batch[index];
+          const originalEmail = userEmails[index];
           if (response.ErrorCode === 0) {
             successful++;
-            results.push({
+            allDetails.push({
               messageId: response.MessageID,
               status: 'sent',
               to: originalEmail.to,
@@ -161,7 +233,7 @@ class PostmarkService {
             });
           } else {
             failed++;
-            results.push({
+            allDetails.push({
               messageId: '',
               status: 'failed',
               error: response.Message,
@@ -171,19 +243,17 @@ class PostmarkService {
           }
         });
       } catch (error: any) {
-        console.error('Postmark batch email error:', error);
-        
-        // Mark all emails in this batch as failed
-        batch.forEach(email => {
-          failed++;
-          results.push({
-            messageId: '',
-            status: 'failed',
-            error: error.message,
-            to: email.to,
-            submittedAt: new Date(),
-          });
-        });
+        console.error(`Bulk email error for user ${userId}:`, error);
+        // Add failed results for this batch
+        const errorDetails = userEmails.map(email => ({
+          messageId: '',
+          status: 'failed' as const,
+          error: error.message,
+          to: email.to,
+          submittedAt: new Date(),
+        }));
+        allDetails.push(...errorDetails);
+        failed += userEmails.length;
       }
     }
 
@@ -191,64 +261,8 @@ class PostmarkService {
       successful,
       failed,
       total: emails.length,
-      details: results,
+      details: allDetails,
     };
-  }
-
-  async getDeliveryStats(messageId: string): Promise<any> {
-    if (!this.client) {
-      return null;
-    }
-
-    try {
-      const outboundMessage = await this.client.getOutboundMessageDetails(messageId);
-      return {
-        messageId,
-        status: outboundMessage.Status,
-        events: outboundMessage.MessageEvents,
-        receivedAt: outboundMessage.ReceivedAt,
-        subject: outboundMessage.Subject,
-        to: outboundMessage.Recipients,
-      };
-    } catch (error) {
-      console.error('Error getting delivery stats:', error);
-      return null;
-    }
-  }
-
-  async getAccountInfo(): Promise<any> {
-    if (!this.client) {
-      return null;
-    }
-
-    try {
-      // Note: Account info endpoint may require specific API permissions
-      // For now, return basic service status
-      return {
-        service: 'Postmark',
-        configured: true,
-        fromEmail: this.defaultFromEmail,
-        fromName: this.defaultFromName,
-      };
-    } catch (error) {
-      console.error('Error getting account info:', error);
-      return null;
-    }
-  }
-
-  private htmlToText(html: string): string {
-    // Basic HTML to text conversion
-    return html
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/p>/gi, '\n\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .trim();
   }
 
   private getMockEmailResult(options: EmailOptions): EmailResult {
@@ -260,15 +274,44 @@ class PostmarkService {
     };
   }
 
-  isConfigured(): boolean {
-    return !!this.client;
+  private htmlToText(html: string): string {
+    return html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/?(p|div|h[1-6])\s*\/?>/gi, '\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/\n\s*\n/g, '\n\n')
+      .trim();
   }
 
-  getConfiguration(): { configured: boolean; fromEmail?: string; fromName?: string } {
+  getConfiguration() {
     return {
-      configured: this.isConfigured(),
-      fromEmail: this.defaultFromEmail,
-      fromName: this.defaultFromName,
+      configured: !!this.defaultApiKey,
+      defaultServerAvailable: !!this.defaultClient,
+      userSpecificServersEnabled: true,
+      features: {
+        singleEmail: true,
+        bulkEmail: true,
+        templates: true,
+        tracking: true,
+        userSpecificServers: true,
+      }
+    };
+  }
+
+  /**
+   * Clear cached client for a user (useful when server config changes)
+   */
+  clearUserClient(userId: string) {
+    this.userClients.delete(userId);
+  }
+
+  /**
+   * Get stats about active user clients
+   */
+  getActiveUserClients() {
+    return {
+      totalActiveClients: this.userClients.size,
+      userIds: Array.from(this.userClients.keys()),
     };
   }
 }

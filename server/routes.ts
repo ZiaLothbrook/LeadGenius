@@ -14,6 +14,7 @@ import { campaignExecutionService } from "./services/campaignExecutionService";
 import { emailVerificationService } from "./services/emailVerificationService";
 import { communicationService } from "./services/communicationService";
 import { postmarkService } from "./services/postmarkService";
+import { postmarkServerManager } from "./services/postmarkServerManager";
 import {
   insertProspectSchema,
   insertCampaignSchema,
@@ -471,7 +472,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           configured: !!process.env.ZEROBOUNCE_API_KEY,
           credits: zeroBounceCreditCheck
         },
-        postmark: postmarkService.getConfiguration()
+        postmark: {
+          ...postmarkService.getConfiguration(),
+          serverManager: postmarkServerManager.getConfiguration()
+        }
       });
     } catch (error: any) {
       console.error("Error checking communication status:", error);
@@ -830,6 +834,208 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         message: "Failed to fetch usage analytics",
         error: error.message 
+      });
+    }
+  });
+
+  // Postmark Server Management API Routes
+  app.post('/api/postmark/server/create', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { serverName, serverConfig } = req.body;
+      
+      console.log(`🚀 Creating Postmark server for user ${userId}:`, serverName);
+
+      const result = await postmarkServerManager.createServerForUser(userId, {
+        name: serverName || `${userId.substring(0, 8)} Lead Generation Server`,
+        color: 'blue',
+        trackOpens: true,
+        trackLinks: 'HtmlAndText',
+        ...serverConfig
+      });
+
+      if (result.success) {
+        console.log(`✅ Postmark server created successfully for user ${userId}`);
+        
+        // Clear cached client to force refresh
+        postmarkService.clearUserClient(userId);
+        
+        res.json({
+          success: true,
+          server: result.server,
+          message: 'Postmark server created successfully'
+        });
+      } else {
+        console.error(`❌ Failed to create Postmark server for user ${userId}:`, result.error);
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error creating Postmark server:", error);
+      res.status(500).json({ 
+        message: "Failed to create Postmark server",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.get('/api/postmark/server/status', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const serverConfig = await postmarkServerManager.getUserServerConfig(userId);
+      const user = await storage.getUser(userId);
+      
+      res.json({
+        hasServer: !!serverConfig,
+        server: serverConfig ? {
+          id: serverConfig.id,
+          name: serverConfig.name,
+          createdAt: user?.postmarkServerCreatedAt,
+          fromEmail: user?.postmarkFromEmail,
+          fromName: user?.postmarkFromName
+        } : null,
+        capabilities: postmarkServerManager.getConfiguration()
+      });
+    } catch (error) {
+      console.error("❌ Error checking Postmark server status:", error);
+      res.status(500).json({ 
+        message: "Failed to check server status",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.post('/api/postmark/server/auto-create', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      console.log(`🤖 Auto-creating Postmark server for user ${userId}`);
+
+      const result = await postmarkServerManager.autoCreateServerForUser(userId);
+
+      if (result.success) {
+        console.log(`✅ Auto-created Postmark server for user ${userId}`);
+        
+        // Clear cached client to force refresh
+        postmarkService.clearUserClient(userId);
+        
+        res.json({
+          success: true,
+          server: result.server,
+          message: 'Postmark server auto-created successfully'
+        });
+      } else {
+        console.error(`❌ Failed to auto-create Postmark server for user ${userId}:`, result.error);
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error auto-creating Postmark server:", error);
+      res.status(500).json({ 
+        message: "Failed to auto-create Postmark server",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.patch('/api/postmark/server/config', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { fromEmail, fromName, serverName } = req.body;
+
+      // Update user's email configuration
+      const updateData: Partial<any> = {};
+      if (fromEmail) updateData.postmarkFromEmail = fromEmail;
+      if (fromName) updateData.postmarkFromName = fromName;
+
+      if (Object.keys(updateData).length > 0) {
+        await storage.updateUser(userId, updateData);
+        
+        // Clear cached client to force refresh
+        postmarkService.clearUserClient(userId);
+      }
+
+      // Update server name if provided
+      if (serverName) {
+        const result = await postmarkServerManager.updateServerConfig(userId, {
+          name: serverName
+        });
+
+        if (!result.success) {
+          return res.status(400).json({
+            success: false,
+            error: result.error
+          });
+        }
+      }
+
+      console.log(`✅ Updated Postmark configuration for user ${userId}`);
+      
+      res.json({
+        success: true,
+        message: 'Postmark configuration updated successfully'
+      });
+    } catch (error) {
+      console.error("❌ Error updating Postmark configuration:", error);
+      res.status(500).json({ 
+        message: "Failed to update Postmark configuration",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.delete('/api/postmark/server', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      console.log(`🗑️ Deleting Postmark server for user ${userId}`);
+
+      const result = await postmarkServerManager.deleteUserServer(userId);
+
+      if (result.success) {
+        console.log(`✅ Deleted Postmark server for user ${userId}`);
+        
+        // Clear cached client
+        postmarkService.clearUserClient(userId);
+        
+        res.json({
+          success: true,
+          message: 'Postmark server deleted successfully'
+        });
+      } else {
+        console.error(`❌ Failed to delete Postmark server for user ${userId}:`, result.error);
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error deleting Postmark server:", error);
+      res.status(500).json({ 
+        message: "Failed to delete Postmark server",
+        error: (error as Error).message 
       });
     }
   });
