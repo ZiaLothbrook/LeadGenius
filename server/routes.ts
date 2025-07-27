@@ -13,6 +13,7 @@ import { messageGenerationService } from "./services/messageGenerationService";
 import { campaignExecutionService } from "./services/campaignExecutionService";
 import { emailVerificationService } from "./services/emailVerificationService";
 import { communicationService } from "./services/communicationService";
+import { postmarkService } from "./services/postmarkService";
 import {
   insertProspectSchema,
   insertCampaignSchema,
