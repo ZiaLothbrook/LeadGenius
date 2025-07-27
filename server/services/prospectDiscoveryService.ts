@@ -163,6 +163,19 @@ export class ProspectDiscoveryService {
         intentSignals: p.intentSignals || []
       }));
       
+      console.log(`📊 Processed prospects details:`, {
+        total: processedProspects.length,
+        withEmail: processedProspects.filter(p => p.email).length,
+        withLinkedIn: processedProspects.filter(p => p.linkedinUrl).length,
+        avgDataQuality: processedProspects.reduce((sum, p) => sum + (p.dataQuality || 0), 0) / processedProspects.length,
+        samples: processedProspects.slice(0, 3).map(p => ({
+          name: p.name,
+          company: p.company,
+          email: p.email ? 'has_email' : 'no_email',
+          dataQuality: p.dataQuality
+        }))
+      });
+      
       // Apply additional filtering if needed
       const filteredProspects = this.applyAdvancedFilters(processedProspects, searchCriteria);
       
@@ -538,18 +551,32 @@ export class ProspectDiscoveryService {
   }
 
   private applyAdvancedFilters(prospects: UnifiedProspect[], criteria: SearchCriteria): UnifiedProspect[] {
-    return prospects.filter(prospect => {
-      // Filter by minimum data quality
-      if (prospect.dataQuality < 0.3) return false;
+    console.log(`🎯 Applying advanced filters to ${prospects.length} prospects...`);
+    
+    const filtered = prospects.filter(prospect => {
+      // More lenient data quality filter - accept lower quality prospects
+      if (prospect.dataQuality < 0.1) {
+        console.log(`❌ Filtering out prospect due to low data quality (${prospect.dataQuality}):`, prospect.name);
+        return false;
+      }
       
-      // Filter by AI score if available
-      if (prospect.aiScore && prospect.aiScore < 30) return false;
+      // More lenient AI score filter - only filter out very low scores
+      if (prospect.aiScore && prospect.aiScore < 10) {
+        console.log(`❌ Filtering out prospect due to low AI score (${prospect.aiScore}):`, prospect.name);
+        return false;
+      }
       
-      // Must have either email or LinkedIn
-      if (!prospect.email && !prospect.linkedinUrl) return false;
+      // More lenient contact info requirement - allow prospects with name and company even without email/LinkedIn
+      if (!prospect.name || !prospect.company) {
+        console.log(`❌ Filtering out prospect due to missing basic info:`, prospect);
+        return false;
+      }
       
       return true;
     });
+    
+    console.log(`🎯 Advanced filtering complete: ${prospects.length} -> ${filtered.length} prospects`);
+    return filtered;
   }
 
   private calculateAverageConfidence(prospects: UnifiedProspect[]): number {
