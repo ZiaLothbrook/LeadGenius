@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useAuth } from "@/hooks/useAuth";
+import CampaignOrchestrationPanel from "@/components/campaign/CampaignOrchestrationPanel";
 import { 
   Send, 
   Play, 
@@ -30,7 +31,8 @@ import {
   Info,
   Zap,
   ShieldCheck,
-  DollarSign
+  DollarSign,
+  Settings
 } from "lucide-react";
 
 export default function Campaigns() {
@@ -39,6 +41,8 @@ export default function Campaigns() {
   const queryClient = useQueryClient();
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
   const [showExecuteDialog, setShowExecuteDialog] = useState(false);
+  const [showOrchestrationPanel, setShowOrchestrationPanel] = useState(false);
+  const [orchestrationCampaignId, setOrchestrationCampaignId] = useState<string | null>(null);
   const [executionChannel, setExecutionChannel] = useState<string>("email");
   const [testMode, setTestMode] = useState(true);
 
@@ -57,17 +61,17 @@ export default function Campaigns() {
     }
   }, [isAuthenticated, authLoading, toast]);
 
-  const { data: campaigns, isLoading } = useQuery({
+  const { data: campaigns = [], isLoading } = useQuery({
     queryKey: ["/api/campaigns"],
     retry: false,
   });
 
-  const { data: stats } = useQuery({
+  const { data: stats = {} } = useQuery({
     queryKey: ["/api/dashboard/stats"],
     retry: false,
   });
 
-  const { data: communicationStatus } = useQuery({
+  const { data: communicationStatus = {} } = useQuery({
     queryKey: ["/api/communication/status"],
     retry: false,
   });
@@ -199,9 +203,9 @@ export default function Campaigns() {
     return ((campaign.opened / campaign.sent) * 100).toFixed(1) + "%";
   };
 
-  const activeCampaigns = campaigns?.filter((c: any) => c.status === "active") || [];
-  const totalSent = campaigns?.reduce((sum: number, c: any) => sum + (c.sent || 0), 0) || 0;
-  const avgResponseRate = campaigns?.length > 0 
+  const activeCampaigns = Array.isArray(campaigns) ? campaigns.filter((c: any) => c.status === "active") : [];
+  const totalSent = Array.isArray(campaigns) ? campaigns.reduce((sum: number, c: any) => sum + (c.sent || 0), 0) : 0;
+  const avgResponseRate = Array.isArray(campaigns) && campaigns.length > 0 
     ? (campaigns.reduce((sum: number, c: any) => sum + (c.replied || 0), 0) / Math.max(totalSent, 1) * 100).toFixed(1)
     : "0.0";
 
@@ -241,11 +245,11 @@ export default function Campaigns() {
                   <Mail className="w-4 h-4" />
                   <span>Email Verification</span>
                 </div>
-                {communicationStatus.zerobounce?.configured ? (
+                {(communicationStatus as any)?.zerobounce?.configured ? (
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-600" />
                     <span className="text-sm text-muted-foreground">
-                      {communicationStatus.zerobounce.credits || 0} credits
+                      {(communicationStatus as any).zerobounce.credits || 0} credits
                     </span>
                   </div>
                 ) : (
@@ -258,11 +262,11 @@ export default function Campaigns() {
                   <MessageSquare className="w-4 h-4" />
                   <span>SMS/Voice</span>
                 </div>
-                {communicationStatus.twilio?.configured ? (
+                {(communicationStatus as any)?.twilio?.configured ? (
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-green-600" />
                     <span className="text-sm text-muted-foreground">
-                      {communicationStatus.twilio.phoneNumber}
+                      {(communicationStatus as any).twilio.phoneNumber}
                     </span>
                   </div>
                 ) : (
@@ -275,7 +279,7 @@ export default function Campaigns() {
                   <Send className="w-4 h-4" />
                   <span>Email Sending</span>
                 </div>
-                {communicationStatus.sendgrid?.configured ? (
+                {(communicationStatus as any)?.sendgrid?.configured ? (
                   <CheckCircle className="w-4 h-4 text-green-600" />
                 ) : (
                   <div className="flex items-center gap-2">
@@ -301,7 +305,7 @@ export default function Campaigns() {
               {activeCampaigns.length}
             </p>
             <p className="text-sm text-slate-600">
-              {campaigns?.filter((c: any) => c.type === "email").length || 0} email • {campaigns?.filter((c: any) => c.type === "linkedin").length || 0} LinkedIn • {campaigns?.filter((c: any) => c.type === "multi-channel").length || 0} multi-channel
+              {Array.isArray(campaigns) ? campaigns.filter((c: any) => c.type === "email").length : 0} email • {Array.isArray(campaigns) ? campaigns.filter((c: any) => c.type === "linkedin").length : 0} LinkedIn • {Array.isArray(campaigns) ? campaigns.filter((c: any) => c.type === "multi-channel").length : 0} multi-channel
             </p>
           </CardContent>
         </Card>
@@ -359,7 +363,7 @@ export default function Campaigns() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {campaigns?.length > 0 ? (
+                {Array.isArray(campaigns) && campaigns.length > 0 ? (
                   campaigns.map((campaign: any) => (
                     <tr key={campaign.id} className="hover:bg-slate-50">
                       <td className="table-cell">
@@ -641,6 +645,23 @@ export default function Campaigns() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Campaign Orchestration Panel */}
+      {showOrchestrationPanel && orchestrationCampaignId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-auto">
+            <div className="p-6">
+              <CampaignOrchestrationPanel 
+                campaignId={orchestrationCampaignId}
+                onClose={() => {
+                  setShowOrchestrationPanel(false);
+                  setOrchestrationCampaignId(null);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

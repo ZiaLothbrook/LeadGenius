@@ -7,9 +7,18 @@ import {
   Zap, 
   Send, 
   PieChart,
+  Key,
   Rocket,
   LogOut,
-  User
+  User,
+  Mail,
+  Users,
+  Brain,
+  Target,
+  Calendar,
+  Activity,
+  Shield,
+  MessageSquare
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -37,14 +46,64 @@ const navItems = [
     icon: Zap,
   },
   {
+    name: "Context Analysis",
+    href: "/context-analysis",
+    icon: Brain,
+  },
+  {
+    name: "Message Optimization",
+    href: "/message-optimization",
+    icon: Target,
+  },
+  {
+    name: "AI Message Generation",
+    href: "/message-generation",
+    icon: MessageSquare,
+  },
+  {
+    name: "Campaign Scheduling",
+    href: "/campaign-scheduling",
+    icon: Calendar,
+  },
+  {
+    name: "Response Detection",
+    href: "/response-detection",
+    icon: Activity,
+  },
+  {
+    name: "Deliverability Monitoring",
+    href: "/deliverability-monitoring",
+    icon: Shield,
+  },
+  {
     name: "Campaigns",
     href: "/campaigns",
     icon: Send,
   },
   {
+    name: "Email Delivery",
+    href: "/email-delivery",
+    icon: Mail,
+  },
+  {
+    name: "LinkedIn",
+    href: "/linkedin",
+    icon: Users,
+  },
+  {
     name: "Analytics",
     href: "/analytics",
     icon: PieChart,
+  },
+  {
+    name: "Search Analytics",
+    href: "/search-analytics",
+    icon: BarChart3,
+  },
+  {
+    name: "API Keys",
+    href: "/apis",
+    icon: Key,
   },
 ];
 

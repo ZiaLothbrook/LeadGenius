@@ -85,10 +85,8 @@ export default function Personalization() {
         },
       };
       
-      return apiRequest("/api/messages/generate", {
-        method: "POST",
-        body: payload,
-      });
+      const response = await apiRequest("POST", "/api/messages/generate", payload);
+      return response.json();
     },
     onSuccess: (data: any) => {
       setGeneratedMessages([data]);
@@ -133,7 +131,7 @@ export default function Personalization() {
     }
 
     setIsGenerating(true);
-    generateMessageMutation.mutate({});
+    generateMessageMutation.mutate();
   };
 
   const handleCopyMessage = (content: string) => {

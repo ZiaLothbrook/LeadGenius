@@ -7,12 +7,25 @@ import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Login from "@/pages/login";
+import Register from "@/pages/register";
+import ForgotPassword from "@/pages/forgot-password";
 import Dashboard from "@/pages/dashboard";
 import Discovery from "@/pages/discovery";
 import Enrichment from "@/pages/enrichment";
 import Personalization from "@/pages/personalization";
+import ContextAnalysis from "@/pages/context-analysis";
+import MessageOptimization from "@/pages/message-optimization";
+import MessageGeneration from "@/pages/message-generation";
+import CampaignScheduling from "@/pages/campaign-scheduling";
+import ResponseDetection from "@/pages/response-detection";
+import DeliverabilityMonitoring from "@/pages/deliverability-monitoring";
+import Admin from "@/pages/admin";
+import EmailDelivery from "@/pages/email-delivery";
+import LinkedIn from "@/pages/linkedin";
 import Campaigns from "@/pages/campaigns";
 import Analytics from "@/pages/analytics";
+import SearchAnalyticsDashboard from "@/pages/search-analytics";
+import APIs from "@/pages/apis";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 
@@ -24,6 +37,8 @@ function Router() {
       <Switch>
         <Route path="/" component={Landing} />
         <Route path="/login" component={Login} />
+        <Route path="/register" component={Register} />
+        <Route path="/forgot-password" component={ForgotPassword} />
         <Route component={NotFound} />
       </Switch>
     );
@@ -40,8 +55,19 @@ function Router() {
             <Route path="/discovery" component={Discovery} />
             <Route path="/enrichment" component={Enrichment} />
             <Route path="/personalization" component={Personalization} />
+            <Route path="/context-analysis" component={ContextAnalysis} />
+            <Route path="/message-optimization" component={MessageOptimization} />
+            <Route path="/message-generation" component={MessageGeneration} />
+            <Route path="/campaign-scheduling" component={CampaignScheduling} />
+            <Route path="/response-detection" component={ResponseDetection} />
+            <Route path="/deliverability-monitoring" component={DeliverabilityMonitoring} />
             <Route path="/campaigns" component={Campaigns} />
+            <Route path="/email-delivery" component={EmailDelivery} />
+            <Route path="/linkedin" component={LinkedIn} />
             <Route path="/analytics" component={Analytics} />
+            <Route path="/search-analytics" component={SearchAnalyticsDashboard} />
+            <Route path="/apis" component={APIs} />
+            <Route path="/admin" component={Admin} />
             <Route component={NotFound} />
           </Switch>
         </div>

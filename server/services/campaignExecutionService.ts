@@ -1,13 +1,15 @@
 import { emailVerificationService } from './emailVerificationService';
 import { communicationService } from './communicationService';
 import { messageGenerationService } from './messageGenerationService';
+import { postmarkService } from './postmarkService';
+import { linkedinMessagingService } from './linkedinMessagingService';
 import { storage } from '../storage';
 import type { Campaign, Prospect, Message } from '@shared/schema';
 
 interface CampaignExecutionOptions {
   campaignId: string;
   prospectIds?: string[];
-  channel: 'email' | 'sms' | 'call' | 'multi';
+  channel: 'email' | 'sms' | 'call' | 'linkedin' | 'multi';
   testMode?: boolean;
 }
 
@@ -46,7 +48,7 @@ class CampaignExecutionService {
     if (prospectIds && prospectIds.length > 0) {
       prospects = await Promise.all(
         prospectIds.map(id => storage.getProspect(id))
-      ).then(results => results.filter(p => p !== undefined) as Prospect[]);
+      ).then(results => results.filter((p): p is Prospect => p !== undefined));
     } else {
       prospects = await storage.getCampaignProspectsWithDetails(campaignId);
     }
@@ -69,6 +71,8 @@ class CampaignExecutionService {
         return await this.executeSMSCampaign(campaign, prospects, result, testMode);
       case 'call':
         return await this.executeCallCampaign(campaign, prospects, result, testMode);
+      case 'linkedin':
+        return await this.executeLinkedInCampaign(campaign, prospects, result, testMode);
       case 'multi':
         return await this.executeMultiChannelCampaign(campaign, prospects, result, testMode);
       default:
@@ -89,13 +93,13 @@ class CampaignExecutionService {
           return { prospect, valid: false, reason: 'No email address' };
         }
         
-        const validation = await emailVerificationService.validateEmail(prospect.email);
-        const isValid = emailVerificationService.isDeliverable(validation);
+        const validation = await emailVerificationService.verifyEmail(prospect.email);
+        const isValid = validation.deliverability === 'deliverable';
         
         return {
           prospect,
           valid: isValid,
-          reason: isValid ? undefined : `Email ${validation.status}: ${validation.sub_status}`
+          reason: isValid ? undefined : `Email ${validation.deliverability}: ${validation.reason || 'verification failed'}`
         };
       })
     );
@@ -126,7 +130,7 @@ class CampaignExecutionService {
           },
           campaignContext: {
             productName: campaign.name,
-            productDescription: campaign.description || 'Our solution',
+            productDescription: campaign.messageTemplate || 'Our solution',
             valueProposition: 'Improve your business efficiency',
             callToAction: 'Schedule a demo'
           },
@@ -151,16 +155,35 @@ class CampaignExecutionService {
             deliveryId: `test_${Date.now()}`
           });
         } else {
-          // Note: SendGrid integration would go here when API key is available
-          // For now, we'll mark as successful but note that actual delivery needs SendGrid
-          result.successful++;
-          result.details.push({
-            prospectId: prospect.id,
-            name: prospect.name,
-            status: 'sent',
-            reason: 'Email ready - SendGrid API key needed for delivery',
-            deliveryId: `pending_sendgrid_${Date.now()}`
+          // Send email via Postmark with user context
+          const emailResult = await postmarkService.sendEmail({
+            to: prospect.email!,
+            subject: messageResult.subject || 'Introduction',
+            htmlContent: messageResult.body,
+            tag: `campaign-${campaign.id}`,
+            trackOpens: true,
+            userId: campaign.userId
           });
+
+          if (emailResult.status === 'sent') {
+            result.successful++;
+            result.details.push({
+              prospectId: prospect.id,
+              name: prospect.name,
+              status: 'sent',
+              reason: 'Email delivered via Postmark',
+              deliveryId: emailResult.messageId
+            });
+          } else {
+            result.failed++;
+            result.details.push({
+              prospectId: prospect.id,
+              name: prospect.name,
+              status: 'failed',
+              reason: emailResult.error || 'Email delivery failed',
+              deliveryId: emailResult.messageId || 'none'
+            });
+          }
           
           // Store the message for later sending
           await storage.createMessage({
@@ -170,7 +193,7 @@ class CampaignExecutionService {
             subject: messageResult.subject || 'Introduction',
             content: messageResult.body,
             type: 'email',
-            tone: campaign.tone,
+            tone: campaign.tone || 'professional',
             aiGenerated: true,
             confidenceScore: Math.round(messageResult.aiConfidence * 100)
           });
@@ -223,7 +246,7 @@ class CampaignExecutionService {
           },
           campaignContext: {
             productName: campaign.name,
-            productDescription: campaign.description || 'Our solution',
+            productDescription: campaign.messageTemplate || 'Our solution',
             valueProposition: 'Quick value for your business',
             callToAction: 'Reply YES to learn more'
           },
@@ -271,7 +294,7 @@ class CampaignExecutionService {
             subject: 'SMS Outreach',
             content: messageResult.body.substring(0, 160),
             type: 'sms',
-            tone: campaign.tone,
+            tone: campaign.tone || 'professional',
             aiGenerated: true,
             confidenceScore: Math.round(messageResult.aiConfidence * 100)
           });
@@ -350,7 +373,7 @@ class CampaignExecutionService {
             subject: 'Voice Call',
             content: `Call initiated to ${formattedPhone}`,
             type: 'phone_script',
-            tone: campaign.tone,
+            tone: campaign.tone || 'professional',
             aiGenerated: false
           });
         }
@@ -393,6 +416,114 @@ class CampaignExecutionService {
     return combinedResult;
   }
 
+  /**
+   * Execute LinkedIn campaign with compliant messaging approach
+   */
+  private async executeLinkedInCampaign(
+    campaign: Campaign,
+    prospects: Prospect[],
+    result: ExecutionResult,
+    testMode: boolean
+  ): Promise<ExecutionResult> {
+    console.log(`🔗 Executing LinkedIn campaign: ${campaign.name}`);
+
+    for (const prospect of prospects) {
+      try {
+        // Check if prospect has LinkedIn URL or sufficient info for LinkedIn outreach
+        if (!prospect.linkedinUrl && !prospect.name) {
+          result.skipped++;
+          result.details.push({
+            prospectId: prospect.id,
+            name: prospect.name,
+            status: 'skipped',
+            reason: 'No LinkedIn profile information available'
+          });
+          continue;
+        }
+
+        // Generate LinkedIn connection request message
+        const connectionMessage = await linkedinMessagingService.generateConnectionRequest(
+          prospect,
+          {
+            productName: campaign.goal || 'Business opportunity',
+            productDescription: campaign.messageTemplate || 'Professional connection',
+            valueProposition: campaign.messageTemplate || 'Let\'s connect',
+            callToAction: 'Connect with me'
+          }
+        );
+
+        // Generate follow-up message for after connection acceptance
+        const followUpMessage = await linkedinMessagingService.generateFollowUpMessage(
+          prospect,
+          {
+            productName: campaign.goal || 'Business opportunity',
+            productDescription: campaign.messageTemplate || 'Professional follow-up',
+            valueProposition: campaign.messageTemplate || 'Let\'s discuss collaboration',
+            callToAction: 'Schedule a brief call'
+          }
+        );
+
+        if (testMode) {
+          result.successful++;
+          result.details.push({
+            prospectId: prospect.id,
+            name: prospect.name,
+            status: 'sent',
+            reason: 'LinkedIn messages prepared for manual sending',
+            deliveryId: `linkedin_${connectionMessage.id}`
+          });
+        } else {
+          // LinkedIn campaigns require manual execution due to compliance
+          result.successful++;
+          result.details.push({
+            prospectId: prospect.id,
+            name: prospect.name,
+            status: 'sent',
+            reason: 'LinkedIn message prepared - manual sending required',
+            deliveryId: connectionMessage.id
+          });
+        }
+
+        // Store connection request message
+        await storage.createMessage({
+          userId: campaign.userId,
+          campaignId: campaign.id,
+          prospectId: prospect.id,
+          subject: 'LinkedIn Connection Request',
+          content: connectionMessage.formattedContent,
+          type: 'linkedin',
+          tone: campaign.tone || 'professional',
+          aiGenerated: true,
+          confidenceScore: 85 // LinkedIn messages typically have good confidence
+        });
+
+        // Store follow-up message
+        await storage.createMessage({
+          userId: campaign.userId,
+          campaignId: campaign.id,
+          prospectId: prospect.id,
+          subject: 'LinkedIn Follow-up Message',
+          content: followUpMessage.formattedContent,
+          type: 'linkedin',
+          tone: campaign.tone || 'professional',
+          aiGenerated: true,
+          confidenceScore: 80
+        });
+
+      } catch (error: any) {
+        result.failed++;
+        result.details.push({
+          prospectId: prospect.id,
+          name: prospect.name,
+          status: 'failed',
+          reason: error.message
+        });
+      }
+    }
+
+    return result;
+  }
+
   async getDeliveryStatus(deliveryId: string, channel: string): Promise<string> {
     switch (channel) {
       case 'sms':
@@ -400,8 +531,11 @@ class CampaignExecutionService {
       case 'call':
         return await communicationService.getCallStatus(deliveryId);
       case 'email':
-        // Would check SendGrid status when available
+        // Would check email service status when available
         return 'pending';
+      case 'linkedin':
+        // LinkedIn messages require manual tracking
+        return 'prepared';
       default:
         return 'unknown';
     }
