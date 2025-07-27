@@ -11,10 +11,10 @@ interface OpenRouterResponse {
 // Available models with their capabilities
 const MODELS = {
   // Anthropic models - best for reasoning and analysis
-  // The newest Anthropic model is "claude-sonnet-4-20250514", not "claude-3-5-sonnet-20241022" 
-  CLAUDE_SONNET_4: "anthropic/claude-sonnet-4-20250514",
-  CLAUDE_SONNET: "anthropic/claude-3-5-sonnet-20241022",
-  CLAUDE_HAIKU: "anthropic/claude-3-haiku",
+  // Using verified OpenRouter model IDs - Claude 4 is the latest (May 2025)
+  CLAUDE_SONNET_4: "anthropic/claude-sonnet-4",
+  CLAUDE_SONNET: "anthropic/claude-3.5-sonnet-20241022",
+  CLAUDE_HAIKU: "anthropic/claude-3-haiku-20240307",
   
   // Google models - good for structured output
   GEMINI_PRO: "google/gemini-pro-1.5",
