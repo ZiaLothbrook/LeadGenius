@@ -152,13 +152,14 @@ class CampaignExecutionService {
             deliveryId: `test_${Date.now()}`
           });
         } else {
-          // Send email via Postmark
+          // Send email via Postmark with user context
           const emailResult = await postmarkService.sendEmail({
             to: prospect.email!,
             subject: messageResult.subject || 'Introduction',
             htmlContent: messageResult.body,
             tag: `campaign-${campaign.id}`,
-            trackOpens: true
+            trackOpens: true,
+            userId: campaign.userId
           });
 
           if (emailResult.status === 'sent') {

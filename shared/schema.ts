@@ -36,6 +36,13 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  // Postmark server configuration
+  postmarkServerId: varchar("postmark_server_id"),
+  postmarkServerToken: varchar("postmark_server_token"),
+  postmarkServerName: varchar("postmark_server_name"),
+  postmarkFromEmail: varchar("postmark_from_email"),
+  postmarkFromName: varchar("postmark_from_name"),
+  postmarkServerCreatedAt: timestamp("postmark_server_created_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
