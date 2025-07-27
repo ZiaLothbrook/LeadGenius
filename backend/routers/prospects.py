@@ -8,7 +8,12 @@ from database import get_database
 from routers.auth import get_current_user
 from services.openai_service import openai_service, ProspectEnrichmentRequest
 from services.redis_service import redis_client, cache_key
+from services.search_engine import search_engine
+from models.search import SearchRequest, SearchResponse
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -41,22 +46,23 @@ class ProspectUpdate(BaseModel):
 
 class ProspectResponse(BaseModel):
     id: str
+    user_id: Optional[str] = None
     name: str
-    email: Optional[str]
-    phone: Optional[str]
+    email: Optional[str] = None
+    phone: Optional[str] = None
     company: str
-    title: Optional[str]
-    industry: Optional[str]
-    location: Optional[str]
-    linkedin_url: Optional[str]
-    website_url: Optional[str]
-    score: int
-    verified: bool
-    data_source: str
-    data_quality: int
-    notes: Optional[str]
-    created_at: str
-    updated_at: str
+    title: Optional[str] = None
+    industry: Optional[str] = None
+    location: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    website_url: Optional[str] = None
+    score: int = 0
+    verified: bool = False
+    data_source: str = "manual"
+    data_quality: int = 50
+    notes: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
 @router.get("", response_model=List[ProspectResponse])
 async def get_prospects(
@@ -210,6 +216,38 @@ async def delete_prospect(
         raise HTTPException(status_code=404, detail="Prospect not found")
     
     return {"message": "Prospect deleted successfully"}
+
+@router.post("/search", response_model=SearchResponse)
+async def search_prospects(
+    search_request: SearchRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    CARD-007: Comprehensive multi-source prospect search engine
+    
+    Features:
+    - Multi-source data aggregation (Apollo.io + Database)
+    - Advanced filtering and sorting
+    - AI-powered ranking and scoring
+    - Duplicate detection and merging
+    - Search analytics and optimization
+    - Performance optimization with caching
+    """
+    try:
+        # Execute comprehensive search using the search engine
+        search_result = await search_engine.search_prospects(
+            request=search_request,
+            user_id=current_user["id"]
+        )
+        
+        return search_result
+        
+    except Exception as e:
+        logger.error(f"❌ Prospect search failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Search failed: {str(e)}"
+        )
 
 @router.post("/{prospect_id}/enrich")
 async def enrich_prospect(
