@@ -1,8 +1,7 @@
 import { ApolloClient } from './dataSourceClients/apolloClient';
 import { ZoomInfoClient } from './dataSourceClients/zoomInfoClient';
 import { HunterClient } from './dataSourceClients/hunterClient';
-import { ClearbitClient } from './dataSourceClients/clearbitClient';
-import { LinkedInClient } from './dataSourceClients/linkedInClient';
+import { multiSourceDataPipeline } from './multiSourceDataPipeline';
 import { aiService } from './aiService';
 import crypto from 'crypto';
 import { db } from '../db';
@@ -49,8 +48,6 @@ export class ProspectDiscoveryService {
     apollo?: ApolloClient;
     zoominfo?: ZoomInfoClient;
     hunter?: HunterClient;
-    clearbit?: ClearbitClient;
-    linkedin?: LinkedInClient;
   };
   
   constructor() {
@@ -59,8 +56,6 @@ export class ProspectDiscoveryService {
       apollo: process.env.APOLLO_API_KEY ? new ApolloClient(process.env.APOLLO_API_KEY) : undefined,
       zoominfo: process.env.ZOOMINFO_API_KEY ? new ZoomInfoClient(process.env.ZOOMINFO_API_KEY) : undefined,
       hunter: process.env.HUNTER_API_KEY ? new HunterClient(process.env.HUNTER_API_KEY) : undefined,
-      clearbit: process.env.CLEARBIT_API_KEY ? new ClearbitClient(process.env.CLEARBIT_API_KEY) : undefined,
-      linkedin: process.env.LINKEDIN_API_KEY ? new LinkedInClient(process.env.LINKEDIN_API_KEY) : undefined,
     };
 
     console.log('🔍 Prospect Discovery Service initialized with sources:', 
@@ -135,18 +130,48 @@ export class ProspectDiscoveryService {
 
       console.log(`🔍 Total prospects before deduplication: ${allProspects.length}`);
 
-      // Deduplicate prospects
-      const deduplicatedProspects = this.deduplicateProspects(allProspects);
-      console.log(`🔍 Total prospects after deduplication: ${deduplicatedProspects.length}`);
+      // Use multi-source data pipeline for processing and deduplication
+      console.log(`🔄 Processing ${allProspects.length} prospects through multi-source pipeline...`);
+      const pipelineResult = await multiSourceDataPipeline.processProspects(allProspects, userId || 'anonymous');
       
-      // Apply AI scoring and ranking
-      const scoredProspects = await this.scoreProspects(deduplicatedProspects, searchCriteria);
+      console.log(`✅ Multi-source pipeline completed:`, {
+        processed: pipelineResult.processed.length,
+        duplicates: pipelineResult.duplicates,
+        avgQuality: pipelineResult.qualityStats.overall
+      });
       
-      // Apply advanced filtering
-      const filteredProspects = this.applyAdvancedFilters(scoredProspects, searchCriteria);
+      // Convert to UnifiedProspect format
+      const processedProspects: UnifiedProspect[] = pipelineResult.processed.map(p => ({
+        id: p.id,
+        name: p.name,
+        title: p.title,
+        company: p.company,
+        industry: p.industry,
+        location: p.location,
+        email: p.email,
+        phone: p.phone,
+        linkedinUrl: p.linkedinUrl,
+        dataQuality: p.dataQuality,
+        sources: p.dataSources,
+        enrichmentData: {
+          technologies: p.companyTechnologies,
+          companySize: p.companySize,
+          revenue: p.companyRevenue,
+          lastActivity: p.lastEnriched.toISOString()
+        },
+        aiScore: p.aiScore,
+        intentSignals: p.intentSignals || []
+      }));
       
-      // Sort by AI score
-      filteredProspects.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
+      // Apply additional filtering if needed
+      const filteredProspects = this.applyAdvancedFilters(processedProspects, searchCriteria);
+      
+      // Sort by AI score and data quality
+      filteredProspects.sort((a, b) => {
+        const scoreA = (a.aiScore || 0) + (a.dataQuality || 0) * 0.5;
+        const scoreB = (b.aiScore || 0) + (b.dataQuality || 0) * 0.5;
+        return scoreB - scoreA;
+      });
       
       // Paginate results
       const page = searchCriteria.page || 1;

@@ -1040,6 +1040,222 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Multi-Source Data Integration API Routes
+  app.post('/api/prospects/enrich', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { prospectIds, forceRefresh = false } = req.body;
+      
+      if (!Array.isArray(prospectIds) || prospectIds.length === 0) {
+        return res.status(400).json({ message: "Prospect IDs array is required" });
+      }
+
+      console.log(`🔄 Enriching ${prospectIds.length} prospects for user ${userId}`);
+
+      // Get prospects from database
+      const prospects = [];
+      for (const id of prospectIds) {
+        const prospect = await storage.getProspect(id);
+        if (prospect && prospect.userId === userId) {
+          prospects.push(prospect);
+        }
+      }
+
+      if (prospects.length === 0) {
+        return res.status(404).json({ message: "No prospects found" });
+      }
+
+      // Process through multi-source pipeline
+      const { multiSourceDataPipeline } = await import('./services/multiSourceDataPipeline');
+      const result = await multiSourceDataPipeline.processProspects(prospects, userId);
+
+      console.log(`✅ Enrichment completed for ${prospectIds.length} prospects`);
+
+      res.json({
+        success: true,
+        enriched: result.processed.length,
+        duplicates: result.duplicates,
+        qualityStats: result.qualityStats,
+        message: `Successfully enriched ${result.processed.length} prospects`
+      });
+    } catch (error) {
+      console.error("❌ Error enriching prospects:", error);
+      res.status(500).json({ 
+        message: "Failed to enrich prospects",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.get('/api/prospects/quality-stats', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Get all prospects for user
+      const allProspects = await storage.getProspectsByUserId(userId);
+      
+      // Calculate quality statistics
+      const stats = {
+        total: allProspects.length,
+        withMultipleSources: allProspects.filter((p: any) => p.dataSources && p.dataSources.length > 1).length,
+        averageQuality: allProspects.reduce((sum: number, p: any) => sum + (p.dataQuality || 0), 0) / allProspects.length,
+        verified: allProspects.filter((p: any) => p.isVerified).length,
+        duplicates: allProspects.filter((p: any) => !p.masterRecord).length,
+        sourceBreakdown: {
+          apollo: allProspects.filter((p: any) => p.dataSources?.includes('apollo')).length,
+          zoominfo: allProspects.filter((p: any) => p.dataSources?.includes('zoominfo')).length,
+          hunter: allProspects.filter((p: any) => p.dataSources?.includes('hunter')).length
+        },
+        qualityDistribution: {
+          high: allProspects.filter((p: any) => (p.dataQuality || 0) >= 80).length,
+          medium: allProspects.filter((p: any) => (p.dataQuality || 0) >= 50 && (p.dataQuality || 0) < 80).length,
+          low: allProspects.filter((p: any) => (p.dataQuality || 0) < 50).length
+        }
+      };
+
+      res.json(stats);
+    } catch (error) {
+      console.error("❌ Error getting quality stats:", error);
+      res.status(500).json({ 
+        message: "Failed to get quality stats",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.get('/api/data-sources/status', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { multiSourceDataPipeline } = await import('./services/multiSourceDataPipeline');
+      const stats = multiSourceDataPipeline.getStatistics();
+      
+      const status = {
+        apollo: {
+          available: !!process.env.APOLLO_API_KEY,
+          configured: stats.capabilities.apollo,
+          status: stats.capabilities.apollo ? 'active' : 'inactive'
+        },
+        zoominfo: {
+          available: !!process.env.ZOOMINFO_API_KEY,
+          configured: stats.capabilities.zoominfo,
+          status: stats.capabilities.zoominfo ? 'active' : 'inactive'
+        },
+        hunter: {
+          available: !!process.env.HUNTER_API_KEY,
+          configured: stats.capabilities.hunter,
+          status: stats.capabilities.hunter ? 'active' : 'inactive'
+        },
+        capabilities: stats.capabilities,
+        activeSources: stats.availableSources
+      };
+
+      res.json(status);
+    } catch (error) {
+      console.error("❌ Error getting data source status:", error);
+      res.status(500).json({ 
+        message: "Failed to get data source status",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.post('/api/prospects/deduplicate', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      console.log(`🔄 Starting deduplication for user ${userId}`);
+
+      // Get all prospects for user
+      const allProspects = await storage.getProspectsByUserId(userId);
+      
+      if (allProspects.length === 0) {
+        return res.json({
+          success: true,
+          message: 'No prospects to deduplicate',
+          result: {
+            totalProcessed: 0,
+            duplicatesFound: 0,
+            duplicatesRemoved: 0,
+            masterRecordsCreated: 0,
+            qualityImprovements: 0
+          }
+        });
+      }
+
+      // Process through multi-source pipeline for deduplication
+      const { multiSourceDataPipeline } = await import('./services/multiSourceDataPipeline');
+      const result = await multiSourceDataPipeline.processProspects(allProspects, userId);
+
+      console.log(`✅ Deduplication completed for user ${userId}:`, result.duplicates);
+
+      res.json({
+        success: true,
+        message: `Deduplication completed. Found ${result.duplicates.duplicatesFound} duplicates.`,
+        result: result.duplicates,
+        qualityStats: result.qualityStats
+      });
+    } catch (error) {
+      console.error("❌ Error during deduplication:", error);
+      res.status(500).json({ 
+        message: "Failed to deduplicate prospects",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.get('/api/prospects/:id/sources', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      const prospectId = req.params.id;
+      
+      if (!userId || !prospectId) {
+        return res.status(400).json({ message: "User ID and Prospect ID are required" });
+      }
+
+      const prospect = await storage.getProspect(prospectId);
+      
+      if (!prospect || prospect.userId !== userId) {
+        return res.status(404).json({ message: "Prospect not found" });
+      }
+
+      // Return detailed source attribution
+      const sourceDetails = {
+        id: prospect.id,
+        dataSources: prospect.dataSources || [],
+        dataQualityBreakdown: prospect.dataQualityBreakdown || {},
+        sourceAttribution: prospect.sourceAttribution || {},
+        lastEnriched: prospect.lastEnriched,
+        isVerified: prospect.isVerified,
+        masterRecord: prospect.masterRecord,
+        duplicateOf: prospect.duplicateOf,
+        mergedRecords: prospect.mergedRecords || [],
+        qualityScore: prospect.dataQuality,
+        enrichmentHistory: {
+          apollo: prospect.dataSources?.includes('apollo') ? 'enriched' : 'not_enriched',
+          zoominfo: prospect.dataSources?.includes('zoominfo') ? 'enriched' : 'not_enriched',
+          hunter: prospect.dataSources?.includes('hunter') ? 'enriched' : 'not_enriched'
+        }
+      };
+
+      res.json(sourceDetails);
+    } catch (error) {
+      console.error("❌ Error getting prospect sources:", error);
+      res.status(500).json({ 
+        message: "Failed to get prospect sources",
+        error: (error as Error).message 
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
