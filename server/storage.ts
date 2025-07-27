@@ -34,10 +34,16 @@ export interface IStorage {
   
   // Prospect operations
   getProspects(userId: string, filters?: any): Promise<Prospect[]>;
+  getProspectsByUserId(userId: string): Promise<Prospect[]>;
   getProspect(id: string): Promise<Prospect | undefined>;
   createProspect(prospect: InsertProspect): Promise<Prospect>;
   updateProspect(id: string, prospect: Partial<Prospect>): Promise<Prospect>;
   deleteProspect(id: string): Promise<void>;
+  
+  // Multi-source data integration operations
+  getProspectsByDeduplicationHash(hash: string): Promise<Prospect[]>;
+  getMasterProspects(userId: string): Promise<Prospect[]>;
+  getDuplicateProspects(userId: string): Promise<Prospect[]>;
   
   // Campaign operations
   getCampaigns(userId: string): Promise<Campaign[]>;
@@ -83,15 +89,6 @@ export class DatabaseStorage implements IStorage {
   
   async createUser(userData: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(userData).returning();
-    return user;
-  }
-
-  async updateUser(id: string, updates: Partial<User>): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(users.id, id))
-      .returning();
     return user;
   }
 
@@ -168,6 +165,30 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProspect(id: string): Promise<void> {
     await db.delete(prospects).where(eq(prospects.id, id));
+  }
+
+  async getProspectsByUserId(userId: string): Promise<Prospect[]> {
+    const userProspects = await db.select().from(prospects).where(eq(prospects.userId, userId));
+    return userProspects;
+  }
+
+  async getProspectsByDeduplicationHash(hash: string): Promise<Prospect[]> {
+    const duplicateProspects = await db.select().from(prospects).where(eq(prospects.deduplicationHash, hash));
+    return duplicateProspects;
+  }
+
+  async getMasterProspects(userId: string): Promise<Prospect[]> {
+    const masterProspects = await db.select().from(prospects).where(
+      and(eq(prospects.userId, userId), eq(prospects.masterRecord, true))
+    );
+    return masterProspects;
+  }
+
+  async getDuplicateProspects(userId: string): Promise<Prospect[]> {
+    const duplicateProspects = await db.select().from(prospects).where(
+      and(eq(prospects.userId, userId), eq(prospects.masterRecord, false))
+    );
+    return duplicateProspects;
   }
 
   // Campaign operations

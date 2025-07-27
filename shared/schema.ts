@@ -59,12 +59,49 @@ export const prospects = pgTable("prospects", {
   location: varchar("location"),
   linkedinUrl: varchar("linkedin_url"),
   websiteUrl: varchar("website_url"),
+  
+  // Enhanced multi-source data integration
+  dataSources: text("data_sources").array().default(sql`ARRAY[]::text[]`), // apollo, zoominfo, hunter, clearbit, linkedin
+  dataSource: varchar("data_source"), // Primary source (for backward compatibility)
+  dataQuality: integer("data_quality").default(0), // Overall quality score 0-100
+  dataQualityBreakdown: jsonb("data_quality_breakdown"), // {apollo: 95, zoominfo: 87, hunter: 92}
+  lastEnriched: timestamp("last_enriched"),
+  isVerified: boolean("is_verified").default(false),
+  
+  // Company enrichment data
+  companySize: varchar("company_size"),
+  companyRevenue: varchar("company_revenue"),
+  companyFunding: varchar("company_funding"),
+  companyTechnologies: text("company_technologies").array().default(sql`ARRAY[]::text[]`),
+  companyEmployees: integer("company_employees"),
+  companyType: varchar("company_type"), // startup, enterprise, sme
+  
+  // Contact enrichment data
+  contactMethods: text("contact_methods").array().default(sql`ARRAY[]::text[]`), // email, phone, linkedin, twitter
+  socialProfiles: jsonb("social_profiles"), // {twitter: url, github: url, etc}
+  emailStatus: varchar("email_status"), // valid, invalid, risky, unknown
+  phoneStatus: varchar("phone_status"), // valid, invalid, mobile, landline
+  
+  // AI scoring and insights
+  aiScore: integer("ai_score"), // AI-generated lead score 0-100
+  intentSignals: text("intent_signals").array().default(sql`ARRAY[]::text[]`),
+  priorityLevel: varchar("priority_level").default("medium"), // high, medium, low
+  
+  // Deduplication and data management
+  deduplicationHash: varchar("deduplication_hash"), // Hash for detecting duplicates
+  masterRecord: boolean("master_record").default(true), // True for primary record in duplicate groups
+  duplicateOf: varchar("duplicate_of").references(() => prospects.id), // Points to master record
+  mergedRecords: text("merged_records").array().default(sql`ARRAY[]::text[]`), // IDs of records merged into this one
+  
+  // Source attribution and tracking
+  sourceAttribution: jsonb("source_attribution"), // Detailed attribution per field
+  lastUpdatedBy: varchar("last_updated_by"), // Which source last updated
+  
+  // Legacy fields
   score: integer("score").default(0),
   verified: boolean("verified").default(false),
-  dataSource: varchar("data_source"),
-  dataQuality: integer("data_quality").default(0),
   notes: text("notes"),
-  tags: text("tags").array(),
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
