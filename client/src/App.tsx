@@ -18,6 +18,7 @@ import EmailDelivery from "@/pages/email-delivery";
 import LinkedIn from "@/pages/linkedin";
 import Campaigns from "@/pages/campaigns";
 import Analytics from "@/pages/analytics";
+import SearchAnalyticsDashboard from "@/pages/search-analytics";
 import APIs from "@/pages/apis";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
@@ -52,6 +53,7 @@ function Router() {
             <Route path="/email-delivery" component={EmailDelivery} />
             <Route path="/linkedin" component={LinkedIn} />
             <Route path="/analytics" component={Analytics} />
+            <Route path="/search-analytics" component={SearchAnalyticsDashboard} />
             <Route path="/apis" component={APIs} />
             <Route path="/admin" component={Admin} />
             <Route component={NotFound} />

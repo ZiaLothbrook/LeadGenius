@@ -218,6 +218,95 @@ export const analytics = pgTable("analytics", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Search Analytics tables for CARD-025
+export const searchQueries = pgTable("search_queries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  query: text("query").notNull(),
+  filters: jsonb("filters"), // SearchFilters object
+  executionTime: integer("execution_time"), // milliseconds
+  resultsCount: integer("results_count").default(0),
+  qualityScore: decimal("quality_score", { precision: 5, scale: 2 }), // 0-100
+  effectivenessScore: decimal("effectiveness_score", { precision: 5, scale: 2 }), // 0-100
+  clickThroughRate: decimal("click_through_rate", { precision: 5, scale: 4 }), // 0-1
+  conversionRate: decimal("conversion_rate", { precision: 5, scale: 4 }), // 0-1
+  searchSource: varchar("search_source").default("web"), // web, api, mobile
+  sessionId: varchar("session_id"),
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
+  refinements: integer("refinements").default(0), // Number of times user refined search
+  timeToFirstClick: integer("time_to_first_click"), // milliseconds
+  totalTimeSpent: integer("total_time_spent"), // milliseconds
+  searchIntent: varchar("search_intent"), // discovery, qualification, research
+  satisfaction: integer("satisfaction"), // 1-5 rating if provided
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const searchResults = pgTable("search_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  queryId: varchar("query_id").notNull().references(() => searchQueries.id),
+  prospectId: varchar("prospect_id").references(() => prospects.id),
+  position: integer("position").notNull(), // 1-based position in results
+  relevanceScore: decimal("relevance_score", { precision: 5, scale: 2 }), // 0-100
+  qualityScore: decimal("quality_score", { precision: 5, scale: 2 }), // 0-100
+  dataCompletenessScore: decimal("data_completeness_score", { precision: 5, scale: 2 }), // 0-100
+  clicked: boolean("clicked").default(false),
+  timeToClick: integer("time_to_click"), // milliseconds from result display
+  conversionAction: varchar("conversion_action"), // contacted, saved, campaign_added
+  resultSource: varchar("result_source"), // apollo, zoominfo, hunter, mock
+  resultMetadata: jsonb("result_metadata"), // Additional result context
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const searchSessions = pgTable("search_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  sessionStart: timestamp("session_start").defaultNow(),
+  sessionEnd: timestamp("session_end"),
+  totalQueries: integer("total_queries").default(0),
+  totalResults: integer("total_results").default(0),
+  totalClicks: integer("total_clicks").default(0),
+  totalConversions: integer("total_conversions").default(0),
+  averageQualityScore: decimal("average_quality_score", { precision: 5, scale: 2 }),
+  searchGoal: varchar("search_goal"), // research, outreach, list_building
+  goalAchieved: boolean("goal_achieved").default(false),
+  deviceType: varchar("device_type"), // desktop, mobile, tablet
+  browserInfo: text("browser_info"),
+  referralSource: varchar("referral_source"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const searchOptimizations = pgTable("search_optimizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  originalQuery: text("original_query").notNull(),
+  optimizedQuery: text("optimized_query").notNull(),
+  optimizationType: varchar("optimization_type").notNull(), // spelling, synonym, expansion, refinement
+  improvementScore: decimal("improvement_score", { precision: 5, scale: 2 }), // Expected improvement 0-100
+  automationLevel: varchar("automation_level").default("suggestion"), // suggestion, auto_applied, user_approved
+  applied: boolean("applied").default(false),
+  resultsImprovement: decimal("results_improvement", { precision: 5, scale: 2 }), // Actual improvement if applied
+  feedback: varchar("feedback"), // user feedback: helpful, not_helpful, ignored
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const searchInsights = pgTable("search_insights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  insightType: varchar("insight_type").notNull(), // trend, pattern, recommendation, alert
+  title: varchar("title").notNull(),
+  description: text("description").notNull(),
+  priority: varchar("priority").default("medium"), // high, medium, low
+  category: varchar("category"), // performance, quality, behavior, optimization
+  dataPoints: jsonb("data_points"), // Supporting analytics data
+  actionable: boolean("actionable").default(true),
+  actionTaken: boolean("action_taken").default(false),
+  dismissedAt: timestamp("dismissed_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Email Verification tables for CARD-013
 export const emailVerifications = pgTable("email_verifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -275,6 +364,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   analytics: many(analytics),
   emailVerifications: many(emailVerifications),
   bulkEmailVerifications: many(bulkEmailVerifications),
+  searchQueries: many(searchQueries),
+  searchSessions: many(searchSessions),
+  searchOptimizations: many(searchOptimizations),
+  searchInsights: many(searchInsights),
 }));
 
 export const prospectsRelations: any = relations(prospects, ({ one, many }) => ({
@@ -330,6 +423,47 @@ export const analyticsRelations = relations(analytics, ({ one }) => ({
   campaign: one(campaigns, {
     fields: [analytics.campaignId],
     references: [campaigns.id],
+  }),
+}));
+
+// Search analytics relations
+export const searchQueriesRelations = relations(searchQueries, ({ one, many }) => ({
+  user: one(users, {
+    fields: [searchQueries.userId],
+    references: [users.id],
+  }),
+  results: many(searchResults),
+}));
+
+export const searchResultsRelations = relations(searchResults, ({ one }) => ({
+  query: one(searchQueries, {
+    fields: [searchResults.queryId],
+    references: [searchQueries.id],
+  }),
+  prospect: one(prospects, {
+    fields: [searchResults.prospectId],
+    references: [prospects.id],
+  }),
+}));
+
+export const searchSessionsRelations = relations(searchSessions, ({ one }) => ({
+  user: one(users, {
+    fields: [searchSessions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const searchOptimizationsRelations = relations(searchOptimizations, ({ one }) => ({
+  user: one(users, {
+    fields: [searchOptimizations.userId],
+    references: [users.id],
+  }),
+}));
+
+export const searchInsightsRelations = relations(searchInsights, ({ one }) => ({
+  user: one(users, {
+    fields: [searchInsights.userId],
+    references: [users.id],
   }),
 }));
 
@@ -394,6 +528,32 @@ export const insertBulkEmailVerificationSchema = createInsertSchema(bulkEmailVer
   updatedAt: true,
 });
 
+// Search analytics insert schemas
+export const insertSearchQuerySchema = createInsertSchema(searchQueries).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSearchResultSchema = createInsertSchema(searchResults).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSearchSessionSchema = createInsertSchema(searchSessions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSearchOptimizationSchema = createInsertSchema(searchOptimizations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSearchInsightSchema = createInsertSchema(searchInsights).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = typeof users.$inferInsert;
@@ -445,3 +605,15 @@ export type InsertEmailVerification = z.infer<typeof insertEmailVerificationSche
 export type EmailVerification = typeof emailVerifications.$inferSelect;
 export type InsertBulkEmailVerification = z.infer<typeof insertBulkEmailVerificationSchema>;
 export type BulkEmailVerification = typeof bulkEmailVerifications.$inferSelect;
+
+// Search analytics types
+export type InsertSearchQuery = z.infer<typeof insertSearchQuerySchema>;
+export type SearchQuery = typeof searchQueries.$inferSelect;
+export type InsertSearchResult = z.infer<typeof insertSearchResultSchema>;
+export type SearchResult = typeof searchResults.$inferSelect;
+export type InsertSearchSession = z.infer<typeof insertSearchSessionSchema>;
+export type SearchSession = typeof searchSessions.$inferSelect;
+export type InsertSearchOptimization = z.infer<typeof insertSearchOptimizationSchema>;
+export type SearchOptimization = typeof searchOptimizations.$inferSelect;
+export type InsertSearchInsight = z.infer<typeof insertSearchInsightSchema>;
+export type SearchInsight = typeof searchInsights.$inferSelect;

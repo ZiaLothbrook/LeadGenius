@@ -7,6 +7,11 @@ import {
   analytics,
   emailVerifications,
   bulkEmailVerifications,
+  searchQueries,
+  searchResults,
+  searchSessions,
+  searchOptimizations,
+  searchInsights,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -24,6 +29,16 @@ import {
   type InsertEmailVerification,
   type BulkEmailVerification,
   type InsertBulkEmailVerification,
+  type SearchQuery,
+  type InsertSearchQuery,
+  type SearchResult,
+  type InsertSearchResult,
+  type SearchSession,
+  type InsertSearchSession,
+  type SearchOptimization,
+  type InsertSearchOptimization,
+  type SearchInsight,
+  type InsertSearchInsight,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, sql } from "drizzle-orm";
@@ -87,6 +102,20 @@ export interface IStorage {
   updateBulkEmailVerification(id: string, updates: Partial<BulkEmailVerification>): Promise<BulkEmailVerification>;
   updateProspectEmailStatus(email: string, status: string, userId: string): Promise<void>;
   updateProspectsEmailStatuses(updates: { email: string; status: string }[], userId: string): Promise<void>;
+
+  // Search analytics operations (CARD-025)
+  getSearchQueries(userId: string, limit?: number): Promise<SearchQuery[]>;
+  getSearchQuery(id: string, userId: string): Promise<SearchQuery | undefined>;
+  createSearchQuery(query: InsertSearchQuery): Promise<SearchQuery>;
+  getSearchResults(queryId: string, userId: string): Promise<SearchResult[]>;
+  createSearchResults(results: InsertSearchResult[]): Promise<SearchResult[]>;
+  getSearchSessions(userId: string, limit?: number): Promise<SearchSession[]>;
+  getSearchSession(id: string, userId: string): Promise<SearchSession | undefined>;
+  createSearchSession(session: InsertSearchSession): Promise<SearchSession>;
+  getSearchOptimizations(userId: string, limit?: number): Promise<SearchOptimization[]>;
+  getSearchInsights(userId: string, limit?: number): Promise<SearchInsight[]>;
+  applySearchOptimization(id: string, userId: string, feedback?: string): Promise<SearchOptimization | undefined>;
+  dismissSearchInsight(id: string, userId: string): Promise<SearchInsight | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -565,6 +594,118 @@ export class DatabaseStorage implements IStorage {
     for (const update of updates) {
       await this.updateProspectEmailStatus(update.email, update.status, userId);
     }
+  }
+
+  // Search analytics operations (CARD-025)
+  async getSearchQueries(userId: string, limit: number = 50): Promise<SearchQuery[]> {
+    return await db
+      .select()
+      .from(searchQueries)
+      .where(eq(searchQueries.userId, userId))
+      .orderBy(desc(searchQueries.createdAt))
+      .limit(limit);
+  }
+
+  async getSearchQuery(id: string, userId: string): Promise<SearchQuery | undefined> {
+    const [query] = await db
+      .select()
+      .from(searchQueries)
+      .where(and(eq(searchQueries.id, id), eq(searchQueries.userId, userId)));
+    return query;
+  }
+
+  async createSearchQuery(query: InsertSearchQuery): Promise<SearchQuery> {
+    const [created] = await db.insert(searchQueries).values(query).returning();
+    return created;
+  }
+
+  async getSearchResults(queryId: string, userId: string): Promise<SearchResult[]> {
+    return await db
+      .select()
+      .from(searchResults)
+      .innerJoin(searchQueries, eq(searchResults.queryId, searchQueries.id))
+      .where(and(eq(searchResults.queryId, queryId), eq(searchQueries.userId, userId)))
+      .then(rows => rows.map(row => row.search_results));
+  }
+
+  async createSearchResults(results: InsertSearchResult[]): Promise<SearchResult[]> {
+    if (results.length === 0) return [];
+    return await db.insert(searchResults).values(results).returning();
+  }
+
+  async getSearchSessions(userId: string, limit: number = 20): Promise<SearchSession[]> {
+    return await db
+      .select()
+      .from(searchSessions)
+      .where(eq(searchSessions.userId, userId))
+      .orderBy(desc(searchSessions.sessionStart))
+      .limit(limit);
+  }
+
+  async getSearchSession(id: string, userId: string): Promise<SearchSession | undefined> {
+    const [session] = await db
+      .select()
+      .from(searchSessions)
+      .where(and(eq(searchSessions.id, id), eq(searchSessions.userId, userId)));
+    return session;
+  }
+
+  async createSearchSession(session: InsertSearchSession): Promise<SearchSession> {
+    const [created] = await db.insert(searchSessions).values(session).returning();
+    return created;
+  }
+
+  async getSearchOptimizations(userId: string, limit: number = 10): Promise<SearchOptimization[]> {
+    return await db
+      .select()
+      .from(searchOptimizations)
+      .where(and(
+        eq(searchOptimizations.userId, userId),
+        eq(searchOptimizations.applied, false)
+      ))
+      .orderBy(desc(searchOptimizations.improvementScore))
+      .limit(limit);
+  }
+
+  async getSearchInsights(userId: string, limit: number = 20): Promise<SearchInsight[]> {
+    return await db
+      .select()
+      .from(searchInsights)
+      .where(and(
+        eq(searchInsights.userId, userId),
+        sql`dismissed_at IS NULL`
+      ))
+      .orderBy(desc(searchInsights.createdAt))
+      .limit(limit);
+  }
+
+  async applySearchOptimization(id: string, userId: string, feedback?: string): Promise<SearchOptimization | undefined> {
+    const [optimization] = await db
+      .update(searchOptimizations)
+      .set({
+        applied: true,
+        feedback: feedback || null,
+      })
+      .where(and(
+        eq(searchOptimizations.id, id),
+        eq(searchOptimizations.userId, userId)
+      ))
+      .returning();
+    return optimization;
+  }
+
+  async dismissSearchInsight(id: string, userId: string): Promise<SearchInsight | undefined> {
+    const [insight] = await db
+      .update(searchInsights)
+      .set({
+        dismissedAt: new Date(),
+      })
+      .where(and(
+        eq(searchInsights.id, id),
+        eq(searchInsights.userId, userId)
+      ))
+      .returning();
+    return insight;
   }
 }
 
