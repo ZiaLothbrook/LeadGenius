@@ -52,7 +52,7 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const prospects = pgTable("prospects", {
+export const prospects: typeof pgTable = pgTable("prospects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   name: varchar("name").notNull(),
@@ -148,7 +148,7 @@ export const campaignProspects = pgTable("campaign_prospects", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const messages = pgTable("messages", {
+export const messages: typeof pgTable = pgTable("messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id),
   prospectId: varchar("prospect_id").notNull().references(() => prospects.id),
@@ -226,7 +226,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   analytics: many(analytics),
 }));
 
-export const prospectsRelations = relations(prospects, ({ one, many }) => ({
+export const prospectsRelations: any = relations(prospects, ({ one, many }) => ({
   user: one(users, {
     fields: [prospects.userId],
     references: [users.id],
@@ -256,7 +256,7 @@ export const campaignProspectsRelations = relations(campaignProspects, ({ one })
   }),
 }));
 
-export const messagesRelations = relations(messages, ({ one }) => ({
+export const messagesRelations: any = relations(messages, ({ one }) => ({
   user: one(users, {
     fields: [messages.userId],
     references: [users.id],
