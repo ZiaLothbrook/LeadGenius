@@ -1,6 +1,7 @@
 import { emailVerificationService } from './emailVerificationService';
 import { communicationService } from './communicationService';
 import { messageGenerationService } from './messageGenerationService';
+import { postmarkService } from './postmarkService';
 import { storage } from '../storage';
 import type { Campaign, Prospect, Message } from '@shared/schema';
 
@@ -151,16 +152,34 @@ class CampaignExecutionService {
             deliveryId: `test_${Date.now()}`
           });
         } else {
-          // Note: SendGrid integration would go here when API key is available
-          // For now, we'll mark as successful but note that actual delivery needs SendGrid
-          result.successful++;
-          result.details.push({
-            prospectId: prospect.id,
-            name: prospect.name,
-            status: 'sent',
-            reason: 'Email ready - SendGrid API key needed for delivery',
-            deliveryId: `pending_sendgrid_${Date.now()}`
+          // Send email via Postmark
+          const emailResult = await postmarkService.sendEmail({
+            to: prospect.email,
+            subject: messageResult.subject || 'Introduction',
+            htmlContent: messageResult.body,
+            tag: `campaign-${campaign.id}`,
+            trackOpens: true
           });
+
+          if (emailResult.status === 'sent') {
+            result.successful++;
+            result.details.push({
+              prospectId: prospect.id,
+              name: prospect.name,
+              status: 'sent',
+              reason: 'Email delivered via Postmark',
+              deliveryId: emailResult.messageId
+            });
+          } else {
+            result.failed++;
+            result.details.push({
+              prospectId: prospect.id,
+              name: prospect.name,
+              status: 'failed',
+              reason: emailResult.error || 'Email delivery failed',
+              deliveryId: emailResult.messageId || 'none'
+            });
+          }
           
           // Store the message for later sending
           await storage.createMessage({

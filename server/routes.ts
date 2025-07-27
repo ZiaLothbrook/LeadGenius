@@ -470,9 +470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           configured: !!process.env.ZEROBOUNCE_API_KEY,
           credits: zeroBounceCreditCheck
         },
-        sendgrid: {
-          configured: !!process.env.SENDGRID_API_KEY
-        }
+        postmark: postmarkService.getConfiguration()
       });
     } catch (error: any) {
       console.error("Error checking communication status:", error);
