@@ -100,6 +100,13 @@ The application is designed for deployment on Repl.it with the following conside
 
 ## Recent Changes (January 2025)
 
+- **Redis Connection Issue Resolved** (January 27, 2025):
+  - Fixed persistent Redis connection errors that were flooding the console logs
+  - Disabled Redis client through environment variables (REDIS_DISABLED=true)
+  - Application runs cleanly with graceful Redis fallbacks already built-in
+  - Core functionality including Apollo API integration remains fully operational
+  - Clean console logs improve development experience and reduce resource usage
+
 - **OpenRouter Integration**: Migrated from OpenAI to OpenRouter API for better model diversity
   - Primary models: Anthropic Claude 3.5 Sonnet for reasoning and message generation
   - Secondary models: Google Gemini Pro 1.5 for structured data enrichment
