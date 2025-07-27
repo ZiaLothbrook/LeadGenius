@@ -24,6 +24,7 @@ import { setupCacheRoutes } from "./routes/cacheRoutes";
 import { setupEmailVerificationRoutes } from "./routes/emailVerificationRoutes";
 import searchAnalyticsRoutes from "./routes/searchAnalyticsRoutes";
 import contextAnalysisRoutes from "./routes/contextAnalysisRoutes";
+import { messageOptimizationRoutes } from "./routes/messageOptimizationRoutes";
 import { redisClient } from "./services/redisClient";
 import { cacheService } from "./services/cacheService";
 import { sessionCacheService } from "./services/sessionCacheService";
@@ -2019,6 +2020,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup context analysis routes (CARD-028)
   app.use('/api/context-analysis', isAuthenticatedLocal, contextAnalysisRoutes);
   console.log("🔧 Context analysis routes configured");
+  
+  // Setup message optimization routes (CARD-029)
+  app.use('/api/message-optimization', isAuthenticatedLocal, messageOptimizationRoutes);
+  console.log("🔧 Message optimization routes configured");
 
   const httpServer = createServer(app);
   return httpServer;
