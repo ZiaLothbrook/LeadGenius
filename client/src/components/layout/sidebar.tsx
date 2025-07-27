@@ -12,7 +12,8 @@ import {
   LogOut,
   User,
   Mail,
-  Users
+  Users,
+  Brain
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -38,6 +39,11 @@ const navItems = [
     name: "AI Personalization",
     href: "/personalization",
     icon: Zap,
+  },
+  {
+    name: "Context Analysis",
+    href: "/context-analysis",
+    icon: Brain,
   },
   {
     name: "Campaigns",
