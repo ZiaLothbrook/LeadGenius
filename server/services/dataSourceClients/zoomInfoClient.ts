@@ -85,6 +85,10 @@ export class ZoomInfoClient {
     this.apiKey = apiKey;
   }
 
+  async search(params: ZoomInfoSearchParams): Promise<ZoomInfoSearchResponse> {
+    return this.searchContacts(params);
+  }
+
   async searchContacts(params: ZoomInfoSearchParams): Promise<ZoomInfoSearchResponse> {
     try {
       // ZoomInfo API is complex and requires proper OAuth setup

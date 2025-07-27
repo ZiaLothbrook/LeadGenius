@@ -96,6 +96,10 @@ export class HunterClient {
     this.apiKey = apiKey;
   }
 
+  async search(params: HunterSearchParams): Promise<HunterDomainSearchResponse> {
+    return this.searchDomain(params);
+  }
+
   async searchDomain(params: HunterSearchParams): Promise<HunterDomainSearchResponse> {
     try {
       console.log('🔍 Hunter.io: Searching domain for emails:', params);
@@ -173,6 +177,7 @@ export class HunterClient {
       console.error('Hunter.io email finder error:', error);
       return {
         success: false,
+        sources: [],
         error: error instanceof Error ? error.message : 'Hunter.io API error'
       };
     }
