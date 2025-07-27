@@ -15,6 +15,7 @@ import Enrichment from "@/pages/enrichment";
 import Personalization from "@/pages/personalization";
 import ContextAnalysis from "@/pages/context-analysis";
 import MessageOptimization from "@/pages/message-optimization";
+import MessageGeneration from "@/pages/message-generation";
 import CampaignScheduling from "@/pages/campaign-scheduling";
 import ResponseDetection from "@/pages/response-detection";
 import DeliverabilityMonitoring from "@/pages/deliverability-monitoring";
@@ -56,6 +57,7 @@ function Router() {
             <Route path="/personalization" component={Personalization} />
             <Route path="/context-analysis" component={ContextAnalysis} />
             <Route path="/message-optimization" component={MessageOptimization} />
+            <Route path="/message-generation" component={MessageGeneration} />
             <Route path="/campaign-scheduling" component={CampaignScheduling} />
             <Route path="/response-detection" component={ResponseDetection} />
             <Route path="/deliverability-monitoring" component={DeliverabilityMonitoring} />
