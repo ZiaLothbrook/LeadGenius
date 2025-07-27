@@ -15,6 +15,7 @@ import Enrichment from "@/pages/enrichment";
 import Personalization from "@/pages/personalization";
 import ContextAnalysis from "@/pages/context-analysis";
 import MessageOptimization from "@/pages/message-optimization";
+import CampaignScheduling from "@/pages/campaign-scheduling";
 import Admin from "@/pages/admin";
 import EmailDelivery from "@/pages/email-delivery";
 import LinkedIn from "@/pages/linkedin";
@@ -53,6 +54,7 @@ function Router() {
             <Route path="/personalization" component={Personalization} />
             <Route path="/context-analysis" component={ContextAnalysis} />
             <Route path="/message-optimization" component={MessageOptimization} />
+            <Route path="/campaign-scheduling" component={CampaignScheduling} />
             <Route path="/campaigns" component={Campaigns} />
             <Route path="/email-delivery" component={EmailDelivery} />
             <Route path="/linkedin" component={LinkedIn} />

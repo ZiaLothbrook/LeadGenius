@@ -162,9 +162,9 @@ export default function MessageOptimization() {
     );
   }
 
-  const stats = dashboard?.stats || {};
-  const activeTests = dashboard?.activeTests || [];
-  const recentResults = dashboard?.recentResults || [];
+  const stats = (dashboard as any)?.stats || {};
+  const activeTests = (dashboard as any)?.activeTests || [];
+  const recentResults = (dashboard as any)?.recentResults || [];
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6" data-testid="message-optimization-page">
