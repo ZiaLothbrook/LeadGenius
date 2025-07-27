@@ -1519,6 +1519,183 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // CARD-032: Multi-Channel Campaign Orchestration Routes
+  app.post('/api/campaigns/:id/orchestration/initialize', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { id: campaignId } = req.params;
+      const config = req.body;
+      
+      const { campaignOrchestrationEngine } = await import('./services/campaignOrchestrationEngine');
+      await campaignOrchestrationEngine.initializeCampaign({ ...config, campaignId });
+      
+      res.json({
+        success: true,
+        message: "Campaign orchestration initialized successfully",
+        campaignId
+      });
+    } catch (error) {
+      console.error("❌ Error initializing campaign orchestration:", error);
+      res.status(500).json({ 
+        message: "Failed to initialize campaign orchestration",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.get('/api/campaigns/:id/performance', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { id: campaignId } = req.params;
+      
+      const { campaignOrchestrationEngine } = await import('./services/campaignOrchestrationEngine');
+      const performance = await campaignOrchestrationEngine.getCampaignPerformance(campaignId);
+      
+      res.json(performance);
+    } catch (error) {
+      console.error("❌ Error getting campaign performance:", error);
+      res.status(500).json({ 
+        message: "Failed to get campaign performance",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.post('/api/campaigns/:id/optimize', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { id: campaignId } = req.params;
+      
+      const { campaignOrchestrationEngine } = await import('./services/campaignOrchestrationEngine');
+      const result = await campaignOrchestrationEngine.optimizeCampaign(campaignId);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("❌ Error optimizing campaign:", error);
+      res.status(500).json({ 
+        message: "Failed to optimize campaign",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  // Campaign Sequence Management Routes
+  app.get('/api/sequence-templates', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { industry, useCase } = req.query;
+      
+      const { campaignSequenceManager } = await import('./services/campaignSequenceManager');
+      const templates = campaignSequenceManager.getSequenceTemplates({ industry, useCase });
+      
+      res.json(templates);
+    } catch (error) {
+      console.error("❌ Error getting sequence templates:", error);
+      res.status(500).json({ 
+        message: "Failed to get sequence templates",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.post('/api/campaigns/:id/sequence/apply-template', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { id: campaignId } = req.params;
+      const { templateId } = req.body;
+      
+      const { campaignSequenceManager } = await import('./services/campaignSequenceManager');
+      const config = await campaignSequenceManager.applySequenceTemplate(campaignId, templateId);
+      
+      res.json({
+        success: true,
+        message: "Sequence template applied successfully",
+        config
+      });
+    } catch (error) {
+      console.error("❌ Error applying sequence template:", error);
+      res.status(500).json({ 
+        message: "Failed to apply sequence template",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.post('/api/campaigns/:id/sequence/custom', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { id: campaignId } = req.params;
+      const { steps } = req.body;
+      
+      const { campaignSequenceManager } = await import('./services/campaignSequenceManager');
+      const sequence = await campaignSequenceManager.createCustomSequence(campaignId, steps);
+      
+      res.json({
+        success: true,
+        message: "Custom sequence created successfully",
+        sequence
+      });
+    } catch (error) {
+      console.error("❌ Error creating custom sequence:", error);
+      res.status(500).json({ 
+        message: "Failed to create custom sequence",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.get('/api/campaigns/:id/sequence/analytics', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { id: campaignId } = req.params;
+      
+      const { campaignSequenceManager } = await import('./services/campaignSequenceManager');
+      const analytics = await campaignSequenceManager.getSequenceAnalytics(campaignId);
+      
+      res.json(analytics);
+    } catch (error) {
+      console.error("❌ Error getting sequence analytics:", error);
+      res.status(500).json({ 
+        message: "Failed to get sequence analytics",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.post('/api/campaigns/:id/automation/rules', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { id: campaignId } = req.params;
+      const rule = req.body;
+      
+      const { campaignSequenceManager } = await import('./services/campaignSequenceManager');
+      const createdRule = await campaignSequenceManager.createAutomationRule(campaignId, rule);
+      
+      res.json({
+        success: true,
+        message: "Automation rule created successfully",
+        rule: createdRule
+      });
+    } catch (error) {
+      console.error("❌ Error creating automation rule:", error);
+      res.status(500).json({ 
+        message: "Failed to create automation rule",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  // Process scheduled campaign actions (would be called by a scheduler)
+  app.post('/api/campaigns/process-scheduled-actions', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const { campaignOrchestrationEngine } = await import('./services/campaignOrchestrationEngine');
+      await campaignOrchestrationEngine.processScheduledActions();
+      
+      res.json({
+        success: true,
+        message: "Scheduled actions processed successfully"
+      });
+    } catch (error) {
+      console.error("❌ Error processing scheduled actions:", error);
+      res.status(500).json({ 
+        message: "Failed to process scheduled actions",
+        error: (error as Error).message 
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { useAuth } from "@/hooks/useAuth";
+import CampaignOrchestrationPanel from "@/components/campaign/CampaignOrchestrationPanel";
 import { 
   Send, 
   Play, 
@@ -30,7 +31,8 @@ import {
   Info,
   Zap,
   ShieldCheck,
-  DollarSign
+  DollarSign,
+  Settings
 } from "lucide-react";
 
 export default function Campaigns() {
@@ -39,6 +41,8 @@ export default function Campaigns() {
   const queryClient = useQueryClient();
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
   const [showExecuteDialog, setShowExecuteDialog] = useState(false);
+  const [showOrchestrationPanel, setShowOrchestrationPanel] = useState(false);
+  const [orchestrationCampaignId, setOrchestrationCampaignId] = useState<string | null>(null);
   const [executionChannel, setExecutionChannel] = useState<string>("email");
   const [testMode, setTestMode] = useState(true);
 
