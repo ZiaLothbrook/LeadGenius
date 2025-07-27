@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
-import jwt
+import jwt as pyjwt
 from datetime import datetime, timedelta
 import os
 from database import get_database
