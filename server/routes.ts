@@ -5,6 +5,7 @@ import { setupAuth, isAuthenticated } from "./replitAuth";
 import { setupLocalAuth, createAdminUser } from "./localAuth";
 import { z } from "zod";
 import { aiService } from "./services/aiService";
+import { pythonAI } from "./services/pythonAiClient";
 import { prospectSearchService, searchFiltersSchema } from "./services/prospectSearchService";
 import { prospectDiscoveryService } from "./services/prospectDiscoveryService";
 import { dataAggregationService } from "./services/dataAggregationService";
@@ -506,7 +507,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       };
       
-      const result = await messageGenerationService.generateMessage(messageRequest);
+      // Check if Python AI service is available
+      const isHealthy = await pythonAI.healthCheck();
+      
+      let result;
+      if (isHealthy) {
+        // Use Python AI service (preferred)
+        console.log("🐍 Using Python FastAPI AI service");
+        const pythonRequest = {
+          prospect,
+          campaign_context: campaignContext,
+          message_options: messageOptions,
+          user_id: userId
+        };
+
+        const pythonResult = await pythonAI.generateMessage(pythonRequest);
+        
+        // Transform Python response to match expected format
+        result = {
+          id: pythonResult.id,
+          subject: pythonResult.variants?.[0]?.subject || "",
+          body: pythonResult.variants?.[0]?.content || "",
+          personalizationScore: pythonResult.variants?.[0]?.personalization_score || 0.5,
+          aiConfidence: pythonResult.variants?.[0]?.confidence || 0.5,
+          metadata: pythonResult.metadata,
+          variants: pythonResult.variants || [],
+        };
+      } else {
+        // Fallback to TypeScript AI service
+        console.warn("⚠️ Python AI service unavailable, using TypeScript fallback");
+        result = await messageGenerationService.generateMessage(messageRequest);
+      }
 
       // Save the main message to database (only if we have a valid prospect ID)
       let savedMessage = null;
@@ -701,6 +732,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
         openrouter: !!process.env.OPENROUTER_API_KEY,
       }
     });
+  });
+
+  // Admin routes for Python AI service monitoring
+  app.get('/api/admin/dashboard', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const isHealthy = await pythonAI.healthCheck();
+      
+      if (isHealthy) {
+        const dashboardData = await pythonAI.getAdminDashboard();
+        res.json(dashboardData);
+      } else {
+        // Return empty dashboard if Python service is down
+        res.json({
+          total_prompts: 0,
+          prompts_today: 0,
+          average_execution_time: 0,
+          top_models: [],
+          recent_prompts: [],
+          error_rate: 0,
+          total_tokens_used: 0
+        });
+      }
+    } catch (error: any) {
+      console.error("Error fetching admin dashboard:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch admin dashboard",
+        error: error.message 
+      });
+    }
+  });
+
+  app.get('/api/admin/prompts', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const isHealthy = await pythonAI.healthCheck();
+      
+      if (isHealthy) {
+        const promptLogs = await pythonAI.getPromptLogs(req.query);
+        res.json(promptLogs);
+      } else {
+        res.json([]);
+      }
+    } catch (error: any) {
+      console.error("Error fetching prompt logs:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch prompt logs",
+        error: error.message 
+      });
+    }
+  });
+
+  app.get('/api/admin/analytics', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 7;
+      const isHealthy = await pythonAI.healthCheck();
+      
+      if (isHealthy) {
+        const analytics = await pythonAI.getUsageAnalytics(days);
+        res.json(analytics);
+      } else {
+        res.json({
+          period: {
+            start_date: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+            end_date: new Date().toISOString(),
+            days
+          },
+          daily_stats: [],
+          prompt_types: [],
+          model_usage: []
+        });
+      }
+    } catch (error: any) {
+      console.error("Error fetching usage analytics:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch usage analytics",
+        error: error.message 
+      });
+    }
   });
 
   const httpServer = createServer(app);

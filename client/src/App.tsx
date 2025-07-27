@@ -11,6 +11,7 @@ import Dashboard from "@/pages/dashboard";
 import Discovery from "@/pages/discovery";
 import Enrichment from "@/pages/enrichment";
 import Personalization from "@/pages/personalization";
+import Admin from "@/pages/admin";
 import Campaigns from "@/pages/campaigns";
 import Analytics from "@/pages/analytics";
 import Sidebar from "@/components/layout/sidebar";
@@ -42,6 +43,7 @@ function Router() {
             <Route path="/personalization" component={Personalization} />
             <Route path="/campaigns" component={Campaigns} />
             <Route path="/analytics" component={Analytics} />
+            <Route path="/admin" component={Admin} />
             <Route component={NotFound} />
           </Switch>
         </div>
