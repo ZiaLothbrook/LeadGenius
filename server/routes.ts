@@ -2087,8 +2087,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // CARD-009: Campaign Creation Routes
   try {
-    const { registerCampaignCreationRoutes } = require('./routes/campaignCreationRoutes');
-    registerCampaignCreationRoutes(app);
+    const campaignModule = await import('./routes/campaignCreationRoutes.js');
+    campaignModule.registerCampaignCreationRoutes(app);
     console.log('🚀 Campaign creation routes configured');
   } catch (error) {
     console.error('❌ Failed to register campaign creation routes:', error);
@@ -2096,11 +2096,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // CARD-010: Email Delivery Engine Routes
   try {
-    const { registerEmailDeliveryRoutes } = require('./routes/emailDeliveryRoutes');
-    registerEmailDeliveryRoutes(app);
+    const emailModule = await import('./routes/emailDeliveryRoutes.js');
+    emailModule.registerEmailDeliveryRoutes(app);
     console.log('📬 Email delivery engine routes configured');
   } catch (error) {
     console.error('❌ Failed to register email delivery routes:', error);
+  }
+
+  // CARD-013: API Rate Limiting and Cost Optimization Routes
+  try {
+    const rateLimitingModule = await import('./routes/apiRateLimitingRoutes.js');
+    rateLimitingModule.registerApiRateLimitingRoutes(app);
+    console.log('🛡️ API rate limiting and cost optimization routes configured');
+  } catch (error) {
+    console.error('❌ Failed to register API rate limiting routes:', error);
   }
 
   const httpServer = createServer(app);
