@@ -7,6 +7,8 @@ import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Login from "@/pages/login";
+import Register from "@/pages/register";
+import ForgotPassword from "@/pages/forgot-password";
 import Dashboard from "@/pages/dashboard";
 import Discovery from "@/pages/discovery";
 import Enrichment from "@/pages/enrichment";
@@ -25,6 +27,8 @@ function Router() {
       <Switch>
         <Route path="/" component={Landing} />
         <Route path="/login" component={Login} />
+        <Route path="/register" component={Register} />
+        <Route path="/forgot-password" component={ForgotPassword} />
         <Route component={NotFound} />
       </Switch>
     );
