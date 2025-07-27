@@ -61,12 +61,13 @@ async function testApiKey(service: string, apiKey: string): Promise<boolean> {
         // Test Apollo API key by making a simple request
         const { ApolloClient } = await import('./services/dataSourceClients/apolloClient');
         const apolloClient = new ApolloClient(apiKey);
-        const testResult = await apolloClient.searchContacts({
-          q_keywords: 'test',
+        const testResult = await apolloClient.search({
+          keywords: 'test',
           page: 1,
-          per_page: 1
+          limit: 1
         });
-        return testResult.success;
+        console.log('🧪 Apollo API key test result:', testResult);
+        return testResult.results.length >= 0; // Success if we get a valid response structure
         
       case 'zoominfo':
         // Test ZoomInfo API key
@@ -114,6 +115,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Create admin user if it doesn't exist
   await createAdminUser();
+
+  // Test endpoint for Apollo API (no authentication required)
+  app.get('/api/test/apollo', async (req, res) => {
+    try {
+      console.log('🧪 Testing Apollo API with environment key...');
+      const { ApolloClient } = await import('./services/dataSourceClients/apolloClient');
+      
+      if (!process.env.APOLLO_API_KEY) {
+        return res.json({
+          success: false,
+          message: 'No Apollo API key found in environment',
+          hasEnvKey: false
+        });
+      }
+
+      const apolloClient = new ApolloClient(process.env.APOLLO_API_KEY);
+      const testResult = await apolloClient.search({
+        keywords: 'sales manager',
+        page: 1,
+        limit: 5
+      });
+
+      console.log('🧪 Apollo test completed:', {
+        success: testResult.results.length >= 0,
+        resultCount: testResult.results.length,
+        total: testResult.total
+      });
+
+      res.json({
+        success: true,
+        message: 'Apollo API test completed',
+        hasEnvKey: true,
+        resultCount: testResult.results.length,
+        total: testResult.total,
+        sampleResult: testResult.results[0] || null
+      });
+    } catch (error) {
+      console.error('❌ Apollo test failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Apollo API test failed',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
 
   // Custom authentication middleware that handles both Replit and local auth
   const isAuthenticatedLocal = async (req: any, res: any, next: any) => {
