@@ -26,6 +26,7 @@ import searchAnalyticsRoutes from "./routes/searchAnalyticsRoutes";
 import contextAnalysisRoutes from "./routes/contextAnalysisRoutes";
 import { messageOptimizationRoutes } from "./routes/messageOptimizationRoutes";
 import campaignSchedulingRoutes from "./routes/campaignSchedulingRoutes";
+import responseDetectionRoutes from "./routes/responseDetectionRoutes";
 import { redisClient } from "./services/redisClient";
 import { cacheService } from "./services/cacheService";
 import { sessionCacheService } from "./services/sessionCacheService";
@@ -2029,6 +2030,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup campaign scheduling routes (CARD-033)
   app.use('/api/campaign-scheduling', isAuthenticatedLocal, campaignSchedulingRoutes);
   console.log("🔧 Campaign scheduling routes configured");
+  
+  // Response Detection routes (CARD-034)
+  console.log('🧠 Response detection routes configured');
+  app.use('/api/response-detection', isAuthenticatedLocal, responseDetectionRoutes);
 
   const httpServer = createServer(app);
   return httpServer;
