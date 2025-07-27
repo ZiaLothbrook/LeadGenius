@@ -10,7 +10,9 @@ import {
   Key,
   Rocket,
   LogOut,
-  User
+  User,
+  Mail,
+  Users
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -41,6 +43,16 @@ const navItems = [
     name: "Campaigns",
     href: "/campaigns",
     icon: Send,
+  },
+  {
+    name: "Email Delivery",
+    href: "/email-delivery",
+    icon: Mail,
+  },
+  {
+    name: "LinkedIn",
+    href: "/linkedin",
+    icon: Users,
   },
   {
     name: "Analytics",

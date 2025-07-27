@@ -15,6 +15,7 @@ import Enrichment from "@/pages/enrichment";
 import Personalization from "@/pages/personalization";
 import Admin from "@/pages/admin";
 import EmailDelivery from "@/pages/email-delivery";
+import LinkedIn from "@/pages/linkedin";
 import Campaigns from "@/pages/campaigns";
 import Analytics from "@/pages/analytics";
 import APIs from "@/pages/apis";
@@ -49,6 +50,7 @@ function Router() {
             <Route path="/personalization" component={Personalization} />
             <Route path="/campaigns" component={Campaigns} />
             <Route path="/email-delivery" component={EmailDelivery} />
+            <Route path="/linkedin" component={LinkedIn} />
             <Route path="/analytics" component={Analytics} />
             <Route path="/apis" component={APIs} />
             <Route path="/admin" component={Admin} />
