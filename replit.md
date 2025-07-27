@@ -10,31 +10,35 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-The application follows a monorepo structure with clear separation between client, server, and shared code:
+The application follows a modern microservices architecture with clear separation between frontend, backend, and infrastructure components:
 
-- **Frontend**: React with TypeScript, Vite build system, wouter for routing
-- **Backend**: Express.js server with TypeScript, RESTful API design
-- **Database**: PostgreSQL with Drizzle ORM for type-safe database operations
-- **Authentication**: Repl.it OAuth integration for user authentication
-- **AI Integration**: OpenAI API for message personalization and prospect enrichment
-- **UI Framework**: shadcn/ui components with Tailwind CSS styling
+```
+Frontend (React + Material-UI) → Backend (FastAPI) → Database (PostgreSQL + pgvector)
+                                      ↓
+                              Background Tasks (Celery)
+                                      ↓
+                                 Cache (Redis)
+```
 
 ## Key Components
 
 ### Frontend Architecture
-- **React SPA**: Single-page application with component-based architecture
-- **State Management**: TanStack Query for server state management and caching
-- **Routing**: wouter for lightweight client-side routing
-- **UI Components**: shadcn/ui component library with Radix UI primitives
-- **Styling**: Tailwind CSS with CSS variables for theming
-- **Build System**: Vite for fast development and optimized production builds
+- **React 18 + TypeScript**: Modern React with full TypeScript support
+- **Material-UI (MUI)**: Google Material Design component library with theming
+- **Emotion CSS-in-JS**: Dynamic styling with CSS-in-JS for component styling
+- **Zustand**: Lightweight state management for client-side state
+- **React Query**: Server state management, caching, and synchronization
+- **React Router**: Client-side routing with protected route management
+- **Vite**: Fast development server and optimized production builds
 
 ### Backend Architecture
-- **Express.js Server**: RESTful API server with middleware architecture
-- **Database Layer**: Drizzle ORM with PostgreSQL for type-safe database operations
-- **Authentication**: Repl.it OAuth with session-based authentication using PostgreSQL session store
-- **AI Services**: OpenAI integration for prospect enrichment and message generation
-- **Error Handling**: Centralized error handling with proper HTTP status codes
+- **FastAPI**: Modern Python web framework with automatic OpenAPI documentation
+- **Pydantic**: Data validation and serialization with type hints
+- **SQLAlchemy**: SQL ORM with async support for database operations
+- **PostgreSQL 15**: Primary database with pgvector extension for AI embeddings
+- **Redis 7**: High-performance caching and session storage
+- **Celery**: Distributed task queue for background processing
+- **JWT Authentication**: Token-based authentication with secure session management
 
 ### Data Storage Solutions
 - **Primary Database**: PostgreSQL with the following main tables:
@@ -52,10 +56,20 @@ The application follows a monorepo structure with clear separation between clien
 - **Route Protection**: Middleware-based authentication checks on protected API endpoints
 - **User Management**: Automatic user creation and profile management
 
-### External Service Integrations
-- **OpenRouter API**: Unified API gateway providing access to Gemini and Anthropic (Claude) models for AI-powered message generation and prospect data enrichment
-- **Neon Database**: Serverless PostgreSQL database with connection pooling
-- **Repl.it Services**: Integration with Repl.it's authentication and hosting platform
+### Infrastructure Components
+- **Docker + Docker Compose**: Containerized application deployment
+- **PostgreSQL + pgvector**: Vector database for AI similarity search and embeddings
+- **Redis Cluster**: Distributed caching and message broker for Celery
+- **Prometheus + Grafana**: Application monitoring, metrics, and observability
+- **GitHub Actions**: CI/CD pipeline with automated testing and deployment
+
+### External Service Integrations  
+- **OpenAI GPT-4 API**: Primary AI service for message generation and prospect enrichment
+- **Apollo.io API**: Real prospect discovery with 265M+ contact database
+- **ZoomInfo API**: Additional prospect data enrichment and verification
+- **Postmark**: Transactional email delivery service
+- **Twilio**: SMS messaging and communication services
+- **ZeroBounce**: Email verification and deliverability optimization
 
 ## Data Flow
 
@@ -99,6 +113,19 @@ The application is designed for deployment on Repl.it with the following conside
 - **Static Asset Serving**: Express serves built frontend assets in production
 
 ## Recent Changes (January 2025)
+
+- **Complete Technology Stack Migration** (January 27, 2025):
+  - **MAJOR ARCHITECTURAL OVERHAUL**: Migrated from Express.js/shadcn stack to FastAPI/Material-UI
+  - **Backend Migration**: Complete rewrite from Express.js + TypeScript to FastAPI + Python 3.11
+  - **Frontend Migration**: Migrated from shadcn/ui + Tailwind CSS to Material-UI + Emotion CSS-in-JS
+  - **State Management**: Replaced TanStack Query with Zustand + React Query combination
+  - **Infrastructure Upgrade**: Added Redis 7 for caching and Celery for background task processing
+  - **Database Enhancement**: Added pgvector extension to PostgreSQL for AI vector embeddings
+  - **Containerization**: Full Docker + Docker Compose setup for scalable deployment
+  - **Monitoring Stack**: Integrated Prometheus + Grafana for comprehensive application monitoring
+  - **AI Service**: Migrated from OpenRouter to OpenAI GPT-4 API for enhanced AI capabilities
+  - **Email Service**: Integrated Postmark for reliable transactional email delivery
+  - **Authentication**: JWT-based authentication with Redis session management
 
 - **FastAPI/Python AI Service Migration** (January 27, 2025):
   - **MAJOR ARCHITECTURAL CHANGE**: Migrated all AI logic from Node.js/TypeScript to FastAPI/Python
