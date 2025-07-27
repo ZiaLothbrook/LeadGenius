@@ -130,7 +130,7 @@ export default function Personalization() {
     }
 
     setIsGenerating(true);
-    generateMessageMutation.mutate({});
+    generateMessageMutation.mutate();
   };
 
   const handleCopyMessage = (content: string) => {

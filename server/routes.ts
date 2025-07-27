@@ -508,21 +508,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const result = await messageGenerationService.generateMessage(messageRequest);
 
-      // Save the main message to database
-      const savedMessage = await storage.createMessage({
-        userId,
-        prospectId: prospect.id || "", // Use empty string if no ID
-        type: messageOptions.templateType || "cold-email",
-        subject: result.subject || "",
-        content: result.body,
-        tone: messageOptions.tone || "professional",
-        aiGenerated: true,
-        variant: "A",
-        confidenceScore: result.aiConfidence,
-      });
+      // Save the main message to database (only if we have a valid prospect ID)
+      let savedMessage = null;
+      if (prospect.id) {
+        try {
+          savedMessage = await storage.createMessage({
+            userId,
+            prospectId: prospect.id,
+            type: messageOptions.templateType || "cold-email",
+            subject: result.subject || "",
+            content: result.body,
+            tone: messageOptions.tone || "professional",
+            aiGenerated: true,
+            variant: "A",
+            confidenceScore: result.aiConfidence,
+          });
+        } catch (error) {
+          console.error("Failed to save message to database:", error);
+          // Continue without saving - we'll still return the generated message
+        }
+      }
 
       res.json({
-        id: savedMessage.id,
+        id: savedMessage?.id || result.id,
         subject: result.subject,
         body: result.body,
         personalizationScore: result.personalizationScore,
