@@ -108,13 +108,19 @@ export class ProspectDiscoveryService {
       // Extract all prospects from results
       const allProspects: UnifiedProspect[] = [];
       rawResults.forEach(({ source, results }) => {
-        results.results.forEach((prospect: any) => {
-          allProspects.push(this.normalizeProspect(prospect, source));
-        });
+        console.log(`📊 ${source} returned ${results.results?.length || 0} prospects`);
+        if (results.results && Array.isArray(results.results)) {
+          results.results.forEach((prospect: any) => {
+            allProspects.push(this.normalizeProspect(prospect, source));
+          });
+        }
       });
+
+      console.log(`🔍 Total prospects before deduplication: ${allProspects.length}`);
 
       // Deduplicate prospects
       const deduplicatedProspects = this.deduplicateProspects(allProspects);
+      console.log(`🔍 Total prospects after deduplication: ${deduplicatedProspects.length}`);
       
       // Apply AI scoring and ranking
       const scoredProspects = await this.scoreProspects(deduplicatedProspects, searchCriteria);
@@ -287,8 +293,9 @@ export class ProspectDiscoveryService {
       sources: [source],
     };
 
-    switch (source) {
-      case 'apollo':
+    try {
+      switch (source) {
+        case 'apollo':
         normalized = {
           id: prospect.id,
           name: `${prospect.first_name} ${prospect.last_name}`.trim(),
@@ -376,6 +383,13 @@ export class ProspectDiscoveryService {
           sources: [source],
         };
         break;
+      }
+    } catch (error) {
+      console.error(`❌ Error normalizing prospect from ${source}:`, error);
+      console.error('Raw prospect data:', prospect);
+      // Return a basic normalized prospect with available data
+      normalized.id = prospect.id || `${source}_${Date.now()}_${Math.random()}`;
+      normalized.name = prospect.name || `${prospect.first_name || ''} ${prospect.last_name || ''}`.trim() || 'Unknown';
     }
 
     return normalized;

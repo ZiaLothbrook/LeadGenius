@@ -119,6 +119,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const userId = req.user.id || req.user.claims?.sub;
       
+      console.log('🔍 Starting prospect discovery search with criteria:', {
+        keywords: keywords || '',
+        industry,
+        companySize,
+        location,
+        jobTitles,
+        technologies,
+        page: page || 1,
+        limit: limit || 50
+      });
+
       const results = await prospectDiscoveryService.searchProspects({
         keywords: keywords || '',
         industry,
@@ -129,6 +140,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         page: page || 1,
         limit: limit || 50
       }, userId);
+
+      console.log('📊 Search results summary:', {
+        success: results.success,
+        totalResults: results.totalResults,
+        prospectsReturned: results.prospects.length,
+        dataSourcesUsed: results.searchInsights.dataSourcesUsed,
+        missingApiKeys: results.searchInsights.missingApiKeys
+      });
       
       // Transform the response to match frontend expectations
       const response = {

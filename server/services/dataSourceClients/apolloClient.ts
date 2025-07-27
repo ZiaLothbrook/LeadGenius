@@ -36,6 +36,7 @@ export class ApolloClient {
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
+    console.log('🚀 Apollo Client initialized with API key:', apiKey ? 'Present' : 'Missing');
   }
 
   async search(params: ApolloSearchParams): Promise<{ results: ApolloProspect[], total: number }> {
@@ -50,35 +51,35 @@ export class ApolloClient {
         per_page: params.limit || 25,
         page: params.page || 1,
       };
-      
+
       // Only add fields that have values to avoid validation errors
       if (params.keywords) {
         payload.q_keywords = params.keywords;
       }
-      
+
       if (params.jobTitles && params.jobTitles.length > 0) {
         payload.person_titles = params.jobTitles;
       }
-      
+
       if (params.industry) {
         payload.organization_industry_tag_names = [params.industry];
       }
-      
+
       if (params.location) {
         payload.organization_locations = [params.location];
       }
-      
+
       const companySizes = this.mapCompanySize(params.companySize);
       if (companySizes.length > 0) {
         payload.organization_num_employees_ranges = companySizes;
       }
-      
+
       if (params.technologies && params.technologies.length > 0) {
         payload.technologies = params.technologies;
       }
-      
+
       console.log('🚀 Apollo API request payload:', JSON.stringify(payload, null, 2));
-      
+
       const response = await axios.post(
         `${this.baseUrl}/mixed_people/search`,
         payload,
@@ -119,12 +120,12 @@ export class ApolloClient {
         response: error.response?.data,
         status: error.response?.status
       });
-      
+
       // If it's a 422 error, log the specific validation issues
       if (error.response?.status === 422) {
         console.error('Apollo API validation error:', JSON.stringify(error.response.data, null, 2));
       }
-      
+
       return { results: [], total: 0 };
     }
   }
@@ -138,7 +139,7 @@ export class ApolloClient {
       '200+': ['201-500', '501-1000', '1001-5000', '5001-10000', '10001+'],
       'all': [],
     };
-    
+
     // Legacy mapping for backward compatibility
     const sizeMap: Record<string, string[]> = {
       'startup': ['1-10', '11-50'],
@@ -146,7 +147,7 @@ export class ApolloClient {
       'midmarket': ['501-1000', '1001-5000'],
       'enterprise': ['5001-10000', '10001+'],
     };
-    
+
     return directMap[size || ''] || sizeMap[size || ''] || [];
   }
 }
