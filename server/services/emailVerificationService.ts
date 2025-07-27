@@ -156,6 +156,13 @@ class EmailVerificationService {
   }
 
   /**
+   * Get ZeroBounce credits (for compatibility with existing routes)
+   */
+  async getCredits(): Promise<{ success: boolean; credits?: number; error?: string }> {
+    return await zerobounceService.getCredits();
+  }
+
+  /**
    * Generate email deliverability recommendations
    */
   generateDeliverabilityRecommendations(results: EmailVerificationResult[]): {

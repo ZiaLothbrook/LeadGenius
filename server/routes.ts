@@ -13,6 +13,7 @@ import { messageGenerationService } from "./services/messageGenerationService";
 import { campaignExecutionService } from "./services/campaignExecutionService";
 import { emailVerificationService } from "./services/emailVerificationService";
 import { communicationService } from "./services/communicationService";
+import { linkedinMessagingService } from "./services/linkedinMessagingService";
 import { postmarkService } from "./services/postmarkService";
 import { postmarkServerManager } from "./services/postmarkServerManager";
 import {
@@ -1809,6 +1810,142 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Failed to handle complaint",
         error: (error as Error).message 
       });
+    }
+  });
+
+  // ===================
+  // LINKEDIN MESSAGING API ROUTES
+  // ===================
+
+  // Generate LinkedIn connection request
+  app.post('/api/linkedin/connection-request', isAuthenticatedLocal, async (req, res) => {
+    try {
+      const { prospectId, campaignContext } = req.body;
+      const userId = req.user.id;
+      
+      const prospect = await storage.getProspect(prospectId);
+      if (!prospect) {
+        return res.status(404).json({ error: 'Prospect not found' });
+      }
+      
+      if (prospect.userId !== userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      const connectionMessage = await linkedinMessagingService.generateConnectionRequest(
+        prospect,
+        campaignContext || {}
+      );
+      
+      res.json(connectionMessage);
+    } catch (error: any) {
+      console.error('Error generating LinkedIn connection request:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Generate LinkedIn follow-up message
+  app.post('/api/linkedin/follow-up', isAuthenticatedLocal, async (req, res) => {
+    try {
+      const { prospectId, campaignContext, previousInteraction } = req.body;
+      const userId = req.user.id;
+      
+      const prospect = await storage.getProspect(prospectId);
+      if (!prospect) {
+        return res.status(404).json({ error: 'Prospect not found' });
+      }
+      
+      if (prospect.userId !== userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      const followUpMessage = await linkedinMessagingService.generateFollowUpMessage(
+        prospect,
+        campaignContext || {},
+        previousInteraction
+      );
+      
+      res.json(followUpMessage);
+    } catch (error: any) {
+      console.error('Error generating LinkedIn follow-up:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Record LinkedIn interaction
+  app.post('/api/linkedin/record-interaction', isAuthenticatedLocal, async (req, res) => {
+    try {
+      const { campaignId, interaction } = req.body;
+      const userId = req.user.id;
+      
+      // Validate interaction data
+      if (!campaignId || !interaction || !interaction.prospectId || !interaction.interactionType) {
+        return res.status(400).json({ error: 'Missing required interaction data' });
+      }
+      
+      await linkedinMessagingService.recordInteraction(userId, campaignId, interaction);
+      
+      res.json({ success: true, message: 'Interaction recorded successfully' });
+    } catch (error: any) {
+      console.error('Error recording LinkedIn interaction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get LinkedIn campaign metrics
+  app.get('/api/linkedin/campaign/:campaignId/metrics', isAuthenticatedLocal, async (req, res) => {
+    try {
+      const { campaignId } = req.params;
+      const userId = req.user.id;
+      
+      // Verify user owns the campaign
+      const campaign = await storage.getCampaign(campaignId);
+      if (!campaign || campaign.userId !== userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      const metrics = await linkedinMessagingService.getCampaignMetrics(campaignId);
+      
+      res.json(metrics || {
+        campaignId,
+        totalPrepared: 0,
+        connectionRequestsSent: 0,
+        messagesResponseRate: 0,
+        connectionAcceptanceRate: 0,
+        meetingRequests: 0,
+        positiveReplies: 0,
+        totalEngagement: 0,
+        lastUpdated: new Date()
+      });
+    } catch (error: any) {
+      console.error('Error getting LinkedIn campaign metrics:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get LinkedIn rate limit status
+  app.get('/api/linkedin/rate-limits', isAuthenticatedLocal, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      
+      const rateLimits = await linkedinMessagingService.getRateLimitStatus(userId);
+      
+      res.json(rateLimits);
+    } catch (error: any) {
+      console.error('Error getting LinkedIn rate limits:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get LinkedIn compliance guidelines
+  app.get('/api/linkedin/compliance', isAuthenticatedLocal, async (req, res) => {
+    try {
+      const guidelines = linkedinMessagingService.getComplianceGuidelines();
+      
+      res.json(guidelines);
+    } catch (error: any) {
+      console.error('Error getting LinkedIn compliance guidelines:', error);
+      res.status(500).json({ error: error.message });
     }
   });
 
