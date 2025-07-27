@@ -27,6 +27,7 @@ import contextAnalysisRoutes from "./routes/contextAnalysisRoutes";
 import { messageOptimizationRoutes } from "./routes/messageOptimizationRoutes";
 import campaignSchedulingRoutes from "./routes/campaignSchedulingRoutes";
 import responseDetectionRoutes from "./routes/responseDetectionRoutes";
+import deliverabilityRoutes from "./routes/deliverabilityRoutes";
 import { redisClient } from "./services/redisClient";
 import { cacheService } from "./services/cacheService";
 import { sessionCacheService } from "./services/sessionCacheService";
@@ -2034,6 +2035,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Response Detection routes (CARD-034)
   console.log('🧠 Response detection routes configured');
   app.use('/api/response-detection', isAuthenticatedLocal, responseDetectionRoutes);
+
+  // Deliverability Monitoring routes (CARD-039)
+  app.use('/api/deliverability', isAuthenticatedLocal, deliverabilityRoutes);
+  console.log('📧 Deliverability monitoring routes configured');
 
   const httpServer = createServer(app);
   return httpServer;

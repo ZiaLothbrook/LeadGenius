@@ -17,6 +17,7 @@ import ContextAnalysis from "@/pages/context-analysis";
 import MessageOptimization from "@/pages/message-optimization";
 import CampaignScheduling from "@/pages/campaign-scheduling";
 import ResponseDetection from "@/pages/response-detection";
+import DeliverabilityMonitoring from "@/pages/deliverability-monitoring";
 import Admin from "@/pages/admin";
 import EmailDelivery from "@/pages/email-delivery";
 import LinkedIn from "@/pages/linkedin";
@@ -57,6 +58,7 @@ function Router() {
             <Route path="/message-optimization" component={MessageOptimization} />
             <Route path="/campaign-scheduling" component={CampaignScheduling} />
             <Route path="/response-detection" component={ResponseDetection} />
+            <Route path="/deliverability-monitoring" component={DeliverabilityMonitoring} />
             <Route path="/campaigns" component={Campaigns} />
             <Route path="/email-delivery" component={EmailDelivery} />
             <Route path="/linkedin" component={LinkedIn} />

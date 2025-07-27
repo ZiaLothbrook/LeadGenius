@@ -711,6 +711,163 @@ export const responseOptimizationInsights = pgTable("response_optimization_insig
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// CARD-039: Deliverability Monitoring Tables
+export const deliverabilityReports = pgTable("deliverability_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  
+  // Report Period
+  reportDate: timestamp("report_date").notNull().defaultNow(),
+  reportPeriod: varchar("report_period", { enum: ["daily", "weekly", "monthly"] }).notNull().default("daily"),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  
+  // Core Metrics
+  totalEmails: integer("total_emails").notNull(),
+  deliveredEmails: integer("delivered_emails").notNull(),
+  bouncedEmails: integer("bounced_emails").notNull(),
+  deliveryRate: decimal("delivery_rate", { precision: 5, scale: 2 }).notNull(), // 0-100
+  bounceRate: decimal("bounce_rate", { precision: 5, scale: 2 }).notNull(), // 0-100
+  
+  // Engagement Metrics
+  openedEmails: integer("opened_emails").default(0),
+  clickedEmails: integer("clicked_emails").default(0),
+  openRate: decimal("open_rate", { precision: 5, scale: 2 }).default("0.00"),
+  clickRate: decimal("click_rate", { precision: 5, scale: 2 }).default("0.00"),
+  
+  // Spam and Complaints
+  spamComplaints: integer("spam_complaints").default(0),
+  spamRate: decimal("spam_rate", { precision: 5, scale: 2 }).default("0.00"),
+  unsubscribes: integer("unsubscribes").default(0),
+  unsubscribeRate: decimal("unsubscribe_rate", { precision: 5, scale: 2 }).default("0.00"),
+  
+  // Reputation Score (0-100)
+  reputationScore: decimal("reputation_score", { precision: 5, scale: 2 }).notNull(),
+  reputationStatus: varchar("reputation_status", { enum: ["excellent", "good", "fair", "poor", "critical"] }).notNull(),
+  
+  // Additional Metadata
+  domain: varchar("domain"),
+  ipAddress: varchar("ip_address"),
+  emailProvider: varchar("email_provider").default("postmark"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
+export const blacklistMonitoring = pgTable("blacklist_monitoring", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  
+  // Monitoring Target
+  monitoringType: varchar("monitoring_type", { enum: ["domain", "ip", "subdomain"] }).notNull(),
+  targetValue: varchar("target_value").notNull(), // domain name, IP address, etc.
+  
+  // Blacklist Information
+  blacklistName: varchar("blacklist_name").notNull(), // Spamhaus, Barracuda, etc.
+  blacklistType: varchar("blacklist_type", { enum: ["ip", "domain", "url", "reputation"] }).notNull(),
+  isListed: boolean("is_listed").notNull().default(false),
+  
+  // Detection Details
+  listingReason: text("listing_reason"),
+  severityLevel: varchar("severity_level", { enum: ["low", "medium", "high", "critical"] }).notNull(),
+  detectionDate: timestamp("detection_date"),
+  removalDate: timestamp("removal_date"),
+  
+  // Status and Actions
+  status: varchar("status", { enum: ["clean", "listed", "delisting_requested", "resolved"] }).default("clean"),
+  actionsTaken: text("actions_taken").array().default(sql`ARRAY[]::text[]`),
+  removalInstructions: text("removal_instructions"),
+  
+  // Monitoring Configuration
+  isActive: boolean("is_active").default(true),
+  checkFrequency: varchar("check_frequency", { enum: ["hourly", "daily", "weekly"] }).default("daily"),
+  lastChecked: timestamp("last_checked"),
+  nextCheck: timestamp("next_check"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
+export const deliverabilityAlerts = pgTable("deliverability_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  
+  // Alert Configuration
+  alertType: varchar("alert_type", { enum: ["delivery_rate", "bounce_rate", "spam_rate", "reputation_drop", "blacklist_detection", "engagement_drop"] }).notNull(),
+  alertSeverity: varchar("alert_severity", { enum: ["info", "warning", "critical", "emergency"] }).notNull(),
+  alertStatus: varchar("alert_status", { enum: ["active", "resolved", "suppressed", "acknowledged"] }).default("active"),
+  
+  // Trigger Information
+  threshold: decimal("threshold", { precision: 5, scale: 2 }).notNull(),
+  currentValue: decimal("current_value", { precision: 5, scale: 2 }).notNull(),
+  triggerCondition: varchar("trigger_condition", { enum: ["above", "below", "equals", "change"] }).notNull(),
+  
+  // Alert Content
+  alertTitle: varchar("alert_title").notNull(),
+  alertMessage: text("alert_message").notNull(),
+  recommendations: text("recommendations").array().default(sql`ARRAY[]::text[]`),
+  
+  // Timing
+  triggeredAt: timestamp("triggered_at").notNull().defaultNow(),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  resolvedAt: timestamp("resolved_at"),
+  suppressedUntil: timestamp("suppressed_until"),
+  
+  // Notification Settings
+  notificationSent: boolean("notification_sent").default(false),
+  notificationChannels: text("notification_channels").array().default(sql`ARRAY[]::text[]`),
+  escalationLevel: integer("escalation_level").default(1),
+  
+  // Related Data
+  relatedReportId: varchar("related_report_id").references(() => deliverabilityReports.id),
+  relatedBlacklistId: varchar("related_blacklist_id").references(() => blacklistMonitoring.id),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
+export const deliverabilityOptimizations = pgTable("deliverability_optimizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  
+  // Optimization Details
+  optimizationType: varchar("optimization_type", { enum: ["content", "sender_reputation", "list_hygiene", "timing", "authentication", "infrastructure"] }).notNull(),
+  optimizationTitle: varchar("optimization_title").notNull(),
+  optimizationDescription: text("optimization_description").notNull(),
+  
+  // Priority and Impact
+  priority: varchar("priority", { enum: ["low", "medium", "high", "critical"] }).notNull(),
+  estimatedImpact: varchar("estimated_impact", { enum: ["low", "medium", "high"] }).notNull(),
+  implementationDifficulty: varchar("implementation_difficulty", { enum: ["easy", "medium", "hard"] }).notNull(),
+  
+  // Status and Progress
+  status: varchar("status", { enum: ["pending", "in_progress", "implemented", "testing", "completed", "cancelled"] }).default("pending"),
+  implementationProgress: integer("implementation_progress").default(0), // 0-100
+  
+  // Recommendations and Actions
+  recommendedActions: text("recommended_actions").array().default(sql`ARRAY[]::text[]`),
+  implementationSteps: text("implementation_steps").array().default(sql`ARRAY[]::text[]`),
+  expectedResults: text("expected_results"),
+  
+  // AI Analysis
+  aiGenerated: boolean("ai_generated").default(true),
+  confidenceScore: decimal("confidence_score", { precision: 5, scale: 2 }).default("95.00"),
+  analysisModel: varchar("analysis_model").default("claude-sonnet-4"),
+  
+  // Timing
+  suggestedBy: timestamp("suggested_by").notNull().defaultNow(),
+  implementedAt: timestamp("implemented_at"),
+  completedAt: timestamp("completed_at"),
+  
+  // Results Tracking
+  beforeMetrics: jsonb("before_metrics"),
+  afterMetrics: jsonb("after_metrics"),
+  improvementPercent: decimal("improvement_percent", { precision: 5, scale: 2 }),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   prospects: many(prospects),
@@ -731,6 +888,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   responseAnalysis: many(responseAnalysis),
   responseActions: many(responseActions),
   responseOptimizationInsights: many(responseOptimizationInsights),
+  deliverabilityReports: many(deliverabilityReports),
+  blacklistMonitoring: many(blacklistMonitoring),
+  deliverabilityAlerts: many(deliverabilityAlerts),
+  deliverabilityOptimizations: many(deliverabilityOptimizations),
 }));
 
 export const prospectsRelations: any = relations(prospects, ({ one, many }) => ({
@@ -1261,6 +1422,19 @@ export type ResponseAction = typeof responseActions.$inferSelect;
 export type InsertResponseAction = z.infer<typeof insertResponseActionSchema>;
 export type ResponseOptimizationInsight = typeof responseOptimizationInsights.$inferSelect;
 export type InsertResponseOptimizationInsight = z.infer<typeof insertResponseOptimizationInsightSchema>;
+
+// CARD-039: Deliverability Monitoring Types
+export type DeliverabilityReport = typeof deliverabilityReports.$inferSelect;
+export type InsertDeliverabilityReport = typeof deliverabilityReports.$inferInsert;
+
+export type BlacklistMonitoring = typeof blacklistMonitoring.$inferSelect;
+export type InsertBlacklistMonitoring = typeof blacklistMonitoring.$inferInsert;
+
+export type DeliverabilityAlert = typeof deliverabilityAlerts.$inferSelect;
+export type InsertDeliverabilityAlert = typeof deliverabilityAlerts.$inferInsert;
+
+export type DeliverabilityOptimization = typeof deliverabilityOptimizations.$inferSelect;
+export type InsertDeliverabilityOptimization = typeof deliverabilityOptimizations.$inferInsert;
 export type InsertProspect = z.infer<typeof insertProspectSchema>;
 export type Prospect = typeof prospects.$inferSelect;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;

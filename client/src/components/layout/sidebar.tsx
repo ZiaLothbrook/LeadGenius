@@ -16,7 +16,8 @@ import {
   Brain,
   Target,
   Calendar,
-  Activity
+  Activity,
+  Shield
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -62,6 +63,11 @@ const navItems = [
     name: "Response Detection",
     href: "/response-detection",
     icon: Activity,
+  },
+  {
+    name: "Deliverability Monitoring",
+    href: "/deliverability-monitoring",
+    icon: Shield,
   },
   {
     name: "Campaigns",
