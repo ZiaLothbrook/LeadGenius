@@ -43,6 +43,11 @@ export const users = pgTable("users", {
   postmarkFromEmail: varchar("postmark_from_email"),
   postmarkFromName: varchar("postmark_from_name"),
   postmarkServerCreatedAt: timestamp("postmark_server_created_at"),
+  // API Keys for data source integration
+  apolloApiKey: varchar("apollo_api_key"),
+  zoomInfoApiKey: varchar("zoominfo_api_key"),
+  hunterApiKey: varchar("hunter_api_key"),
+  apiKeysUpdatedAt: timestamp("api_keys_updated_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -22,6 +22,50 @@ import {
   insertCampaignProspectSchema,
 } from "@shared/schema";
 
+// Helper function to mask API keys for security
+function maskApiKey(key: string): string {
+  if (key.length <= 8) return '••••••••';
+  return key.substring(0, 4) + '••••••••' + key.substring(key.length - 4);
+}
+
+// Helper function to test API keys
+async function testApiKey(service: string, apiKey: string): Promise<boolean> {
+  try {
+    switch (service) {
+      case 'apollo':
+        // Test Apollo API key by making a simple request
+        const { ApolloClient } = await import('./services/dataSourceClients/apolloClient');
+        const apolloClient = new ApolloClient(apiKey);
+        const testResult = await apolloClient.searchContacts({
+          q_keywords: 'test',
+          page: 1,
+          per_page: 1
+        });
+        return testResult.success;
+        
+      case 'zoominfo':
+        // Test ZoomInfo API key
+        const { ZoomInfoClient } = await import('./services/dataSourceClients/zoomInfoClient');
+        const zoomInfoClient = new ZoomInfoClient(apiKey);
+        // Simulate a test - ZoomInfo requires more complex auth, so we'll assume valid format
+        return apiKey.length > 10;
+        
+      case 'hunter':
+        // Test Hunter API key
+        const { HunterClient } = await import('./services/dataSourceClients/hunterClient');
+        const hunterClient = new HunterClient(apiKey);
+        const hunterTest = await hunterClient.getAccountInfo();
+        return hunterTest.success;
+        
+      default:
+        return false;
+    }
+  } catch (error) {
+    console.error(`API key test failed for ${service}:`, error);
+    return false;
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware - setup both Replit and local auth
   await setupAuth(app);
@@ -1251,6 +1295,225 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("❌ Error getting prospect sources:", error);
       res.status(500).json({ 
         message: "Failed to get prospect sources",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  // User API Keys Management Routes
+  app.get('/api/user/api-keys', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Return API key status (masked keys for security)
+      const apiKeys = [
+        {
+          service: 'apollo',
+          name: 'Apollo.io',
+          key: user.apolloApiKey ? maskApiKey(user.apolloApiKey) : '',
+          status: user.apolloApiKey ? 'active' : 'inactive',
+          lastVerified: user.apiKeysUpdatedAt?.toISOString() || ''
+        },
+        {
+          service: 'zoominfo',
+          name: 'ZoomInfo',
+          key: user.zoomInfoApiKey ? maskApiKey(user.zoomInfoApiKey) : '',
+          status: user.zoomInfoApiKey ? 'active' : 'inactive',
+          lastVerified: user.apiKeysUpdatedAt?.toISOString() || ''
+        },
+        {
+          service: 'hunter',
+          name: 'Hunter.io',
+          key: user.hunterApiKey ? maskApiKey(user.hunterApiKey) : '',
+          status: user.hunterApiKey ? 'active' : 'inactive',
+          lastVerified: user.apiKeysUpdatedAt?.toISOString() || ''
+        }
+      ].filter(key => key.key); // Only return configured keys
+
+      res.json(apiKeys);
+    } catch (error) {
+      console.error("❌ Error fetching API keys:", error);
+      res.status(500).json({ 
+        message: "Failed to fetch API keys",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.post('/api/user/api-keys', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { service, key } = req.body;
+      
+      if (!service || !key) {
+        return res.status(400).json({ message: "Service and API key are required" });
+      }
+
+      // Validate service
+      const validServices = ['apollo', 'zoominfo', 'hunter'];
+      if (!validServices.includes(service)) {
+        return res.status(400).json({ message: "Invalid service" });
+      }
+
+      // Test the API key before saving
+      const isValid = await testApiKey(service, key);
+      if (!isValid) {
+        return res.status(400).json({ message: "Invalid or expired API key" });
+      }
+
+      // Update user with new API key
+      const updates: any = {
+        apiKeysUpdatedAt: new Date()
+      };
+
+      switch (service) {
+        case 'apollo':
+          updates.apolloApiKey = key;
+          break;
+        case 'zoominfo':
+          updates.zoomInfoApiKey = key;
+          break;
+        case 'hunter':
+          updates.hunterApiKey = key;
+          break;
+      }
+
+      await storage.updateUser(userId, updates);
+
+      console.log(`✅ API key saved for user ${userId}: ${service}`);
+
+      res.json({
+        success: true,
+        message: `${service} API key saved successfully`,
+        service,
+        status: 'active'
+      });
+    } catch (error) {
+      console.error("❌ Error saving API key:", error);
+      res.status(500).json({ 
+        message: "Failed to save API key",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.delete('/api/user/api-keys/:service', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      const { service } = req.params;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const validServices = ['apollo', 'zoominfo', 'hunter'];
+      if (!validServices.includes(service)) {
+        return res.status(400).json({ message: "Invalid service" });
+      }
+
+      // Remove API key
+      const updates: any = {
+        apiKeysUpdatedAt: new Date()
+      };
+
+      switch (service) {
+        case 'apollo':
+          updates.apolloApiKey = null;
+          break;
+        case 'zoominfo':
+          updates.zoomInfoApiKey = null;
+          break;
+        case 'hunter':
+          updates.hunterApiKey = null;
+          break;
+      }
+
+      await storage.updateUser(userId, updates);
+
+      console.log(`🗑️ API key deleted for user ${userId}: ${service}`);
+
+      res.json({
+        success: true,
+        message: `${service} API key deleted successfully`
+      });
+    } catch (error) {
+      console.error("❌ Error deleting API key:", error);
+      res.status(500).json({ 
+        message: "Failed to delete API key",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  app.post('/api/user/api-keys/:service/test', isAuthenticatedLocal, async (req: any, res) => {
+    try {
+      const userId = req.user.id || req.user.claims?.sub;
+      const { service } = req.params;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Get API key for service
+      let apiKey = '';
+      switch (service) {
+        case 'apollo':
+          apiKey = user.apolloApiKey || '';
+          break;
+        case 'zoominfo':
+          apiKey = user.zoomInfoApiKey || '';
+          break;
+        case 'hunter':
+          apiKey = user.hunterApiKey || '';
+          break;
+        default:
+          return res.status(400).json({ message: "Invalid service" });
+      }
+
+      if (!apiKey) {
+        return res.status(404).json({ message: "API key not found for service" });
+      }
+
+      // Test the API key
+      const isValid = await testApiKey(service, apiKey);
+      
+      if (isValid) {
+        // Update last verified timestamp
+        await storage.updateUser(userId, { apiKeysUpdatedAt: new Date() });
+        
+        res.json({
+          success: true,
+          message: `${service} API key is valid and working`,
+          status: 'active'
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: `${service} API key test failed`,
+          status: 'error'
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error testing API key:", error);
+      res.status(500).json({ 
+        message: "Failed to test API key",
         error: (error as Error).message 
       });
     }

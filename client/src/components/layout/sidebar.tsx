@@ -7,6 +7,7 @@ import {
   Zap, 
   Send, 
   PieChart,
+  Key,
   Rocket,
   LogOut,
   User
@@ -45,6 +46,11 @@ const navItems = [
     name: "Analytics",
     href: "/analytics",
     icon: PieChart,
+  },
+  {
+    name: "API Keys",
+    href: "/apis",
+    icon: Key,
   },
 ];
 
