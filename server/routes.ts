@@ -2094,6 +2094,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.error('❌ Failed to register campaign creation routes:', error);
   }
 
+  // CARD-010: Email Delivery Engine Routes
+  try {
+    const { registerEmailDeliveryRoutes } = require('./routes/emailDeliveryRoutes');
+    registerEmailDeliveryRoutes(app);
+    console.log('📬 Email delivery engine routes configured');
+  } catch (error) {
+    console.error('❌ Failed to register email delivery routes:', error);
+  }
+
   const httpServer = createServer(app);
   return httpServer;
 }
