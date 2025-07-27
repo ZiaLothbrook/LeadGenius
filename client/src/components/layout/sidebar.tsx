@@ -13,7 +13,8 @@ import {
   User,
   Mail,
   Users,
-  Brain
+  Brain,
+  Target
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -44,6 +45,11 @@ const navItems = [
     name: "Context Analysis",
     href: "/context-analysis",
     icon: Brain,
+  },
+  {
+    name: "Message Optimization",
+    href: "/message-optimization",
+    icon: Target,
   },
   {
     name: "Campaigns",

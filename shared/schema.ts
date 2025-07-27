@@ -356,6 +356,211 @@ export const bulkEmailVerifications = pgTable("bulk_email_verifications", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// CARD-029: Message Optimization Tables
+export const messageABTests = pgTable("message_ab_tests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  campaignId: varchar("campaign_id").references(() => campaigns.id),
+  testName: varchar("test_name").notNull(),
+  testType: varchar("test_type").notNull(), // subject_line, content, cta, tone, length, timing
+  hypothesis: text("hypothesis").notNull(),
+  testDescription: text("test_description"),
+  
+  // Test configuration
+  sampleSize: integer("sample_size").notNull(),
+  confidenceLevel: decimal("confidence_level", { precision: 5, scale: 2 }).default("95.00"), // 90, 95, 99
+  minDetectableEffect: decimal("min_detectable_effect", { precision: 5, scale: 2 }).default("5.00"), // 5%
+  trafficSplit: jsonb("traffic_split").default(sql`'{"A": 50, "B": 50}'::jsonb`), // {"A": 50, "B": 30, "C": 20}
+  
+  // Test status and timing
+  status: varchar("status").default("draft"), // draft, running, paused, completed, cancelled
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  plannedDuration: integer("planned_duration"), // hours
+  
+  // Results and statistical significance
+  winningVariant: varchar("winning_variant"), // A, B, C
+  pValue: decimal("p_value", { precision: 10, scale: 8 }),
+  statisticallySignificant: boolean("statistically_significant").default(false),
+  confidenceInterval: jsonb("confidence_interval"), // {"lower": 0.05, "upper": 0.15}
+  
+  // Metadata
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`),
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const messageVariants = pgTable("message_variants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  testId: varchar("test_id").notNull().references(() => messageABTests.id),
+  messageId: varchar("message_id").notNull().references(() => messages.id),
+  variantName: varchar("variant_name").notNull(), // A, B, C, Control, Treatment_1
+  variantType: varchar("variant_type").notNull(), // control, treatment
+  
+  // Variant configuration
+  changes: jsonb("changes").notNull(), // {"subject": "New Subject", "tone": "casual"}
+  changeSummary: text("change_summary"),
+  
+  // Performance metrics
+  sent: integer("sent").default(0),
+  delivered: integer("delivered").default(0),
+  opened: integer("opened").default(0),
+  clicked: integer("clicked").default(0),
+  replied: integer("replied").default(0),
+  converted: integer("converted").default(0),
+  bounced: integer("bounced").default(0),
+  unsubscribed: integer("unsubscribed").default(0),
+  
+  // Calculated rates
+  deliveryRate: decimal("delivery_rate", { precision: 5, scale: 4 }).default("0.0000"),
+  openRate: decimal("open_rate", { precision: 5, scale: 4 }).default("0.0000"),
+  clickRate: decimal("click_rate", { precision: 5, scale: 4 }).default("0.0000"),
+  responseRate: decimal("response_rate", { precision: 5, scale: 4 }).default("0.0000"),
+  conversionRate: decimal("conversion_rate", { precision: 5, scale: 4 }).default("0.0000"),
+  
+  // Effectiveness scoring
+  effectivenessScore: decimal("effectiveness_score", { precision: 5, scale: 2 }).default("0.00"), // 0-100
+  qualityScore: decimal("quality_score", { precision: 5, scale: 2 }).default("0.00"), // 0-100
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const messagePerformanceMetrics = pgTable("message_performance_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").notNull().references(() => messages.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  variantId: varchar("variant_id").references(() => messageVariants.id),
+  
+  // Detailed performance tracking
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  firstOpenedAt: timestamp("first_opened_at"),
+  lastOpenedAt: timestamp("last_opened_at"),
+  firstClickedAt: timestamp("first_clicked_at"),
+  repliedAt: timestamp("replied_at"),
+  convertedAt: timestamp("converted_at"),
+  
+  // Engagement metrics
+  totalOpens: integer("total_opens").default(0),
+  totalClicks: integer("total_clicks").default(0),
+  timeToFirstOpen: integer("time_to_first_open"), // minutes
+  timeToFirstClick: integer("time_to_first_click"), // minutes
+  timeToReply: integer("time_to_reply"), // minutes
+  engagementDuration: integer("engagement_duration"), // seconds
+  
+  // Context and metadata
+  deviceType: varchar("device_type"), // desktop, mobile, tablet
+  emailClient: varchar("email_client"), // gmail, outlook, apple_mail
+  timezone: varchar("timezone"),
+  dayOfWeek: integer("day_of_week"), // 0-6 (Sunday = 0)
+  hourOfDay: integer("hour_of_day"), // 0-23
+  
+  // Delivery information
+  deliveryStatus: varchar("delivery_status"), // delivered, bounced, rejected
+  bounceType: varchar("bounce_type"), // hard, soft, spam
+  bounceReason: text("bounce_reason"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const messageOptimizationRules = pgTable("message_optimization_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  ruleName: varchar("rule_name").notNull(),
+  ruleType: varchar("rule_type").notNull(), // auto_pause, auto_promote, auto_adjust, alert
+  
+  // Rule conditions
+  conditions: jsonb("conditions").notNull(), // {"open_rate": {"<": 5}, "sample_size": {">": 100}}
+  triggers: jsonb("triggers").notNull(), // {"time": "24h", "significance": 0.05}
+  
+  // Rule actions
+  actions: jsonb("actions").notNull(), // {"promote_winner": true, "pause_losers": true}
+  
+  // Rule configuration
+  isActive: boolean("is_active").default(true),
+  priority: integer("priority").default(5), // 1-10, higher = more important
+  cooldownPeriod: integer("cooldown_period").default(24), // hours between applications
+  
+  // Execution tracking
+  lastExecuted: timestamp("last_executed"),
+  executionCount: integer("execution_count").default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const messageEffectivenessScores = pgTable("message_effectiveness_scores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").notNull().references(() => messages.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  
+  // Core effectiveness metrics
+  overallScore: decimal("overall_score", { precision: 5, scale: 2 }).notNull(), // 0-100
+  engagementScore: decimal("engagement_score", { precision: 5, scale: 2 }).default("0.00"), // 0-100
+  conversionScore: decimal("conversion_score", { precision: 5, scale: 2 }).default("0.00"), // 0-100
+  qualityScore: decimal("quality_score", { precision: 5, scale: 2 }).default("0.00"), // 0-100
+  relevanceScore: decimal("relevance_score", { precision: 5, scale: 2 }).default("0.00"), // 0-100
+  
+  // Detailed scoring breakdown
+  subjectLineScore: decimal("subject_line_score", { precision: 5, scale: 2 }).default("0.00"),
+  contentScore: decimal("content_score", { precision: 5, scale: 2 }).default("0.00"),
+  ctaScore: decimal("cta_score", { precision: 5, scale: 2 }).default("0.00"),
+  personalizationScore: decimal("personalization_score", { precision: 5, scale: 2 }).default("0.00"),
+  timingScore: decimal("timing_score", { precision: 5, scale: 2 }).default("0.00"),
+  
+  // AI analysis
+  aiInsights: jsonb("ai_insights"), // AI-generated insights and recommendations
+  improvementSuggestions: text("improvement_suggestions").array().default(sql`ARRAY[]::text[]`),
+  strengths: text("strengths").array().default(sql`ARRAY[]::text[]`),
+  weaknesses: text("weaknesses").array().default(sql`ARRAY[]::text[]`),
+  
+  // Benchmarking
+  industryBenchmarkScore: decimal("industry_benchmark_score", { precision: 5, scale: 2 }),
+  campaignBenchmarkScore: decimal("campaign_benchmark_score", { precision: 5, scale: 2 }),
+  
+  // Score confidence and metadata
+  scoreConfidence: decimal("score_confidence", { precision: 5, scale: 2 }).default("100.00"), // 0-100
+  scoringModel: varchar("scoring_model").default("v1.0"),
+  lastUpdated: timestamp("last_updated").defaultNow(),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const messageOptimizationInsights = pgTable("message_optimization_insights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  insightType: varchar("insight_type").notNull(), // performance_trend, optimization_opportunity, best_practice
+  
+  // Insight content
+  title: varchar("title").notNull(),
+  description: text("description").notNull(),
+  actionable: boolean("actionable").default(true),
+  impactLevel: varchar("impact_level").default("medium"), // low, medium, high, critical
+  confidence: decimal("confidence", { precision: 5, scale: 2 }).default("100.00"), // 0-100
+  
+  // Data sources
+  dataPoints: jsonb("data_points"), // Supporting data for the insight
+  relatedMessages: text("related_messages").array().default(sql`ARRAY[]::text[]`),
+  relatedTests: text("related_tests").array().default(sql`ARRAY[]::text[]`),
+  
+  // Recommendations
+  recommendations: jsonb("recommendations"), // Specific recommendations based on insight
+  estimatedImpact: decimal("estimated_impact", { precision: 5, scale: 2 }), // Expected improvement %
+  
+  // Status and tracking
+  status: varchar("status").default("new"), // new, acknowledged, implemented, dismissed
+  implementedAt: timestamp("implemented_at"),
+  dismissedAt: timestamp("dismissed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   prospects: many(prospects),
@@ -368,6 +573,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   searchSessions: many(searchSessions),
   searchOptimizations: many(searchOptimizations),
   searchInsights: many(searchInsights),
+  messageABTests: many(messageABTests),
+  messageOptimizationRules: many(messageOptimizationRules),
+  messageEffectivenessScores: many(messageEffectivenessScores),
+  messageOptimizationInsights: many(messageOptimizationInsights),
 }));
 
 export const prospectsRelations: any = relations(prospects, ({ one, many }) => ({
@@ -400,7 +609,7 @@ export const campaignProspectsRelations = relations(campaignProspects, ({ one })
   }),
 }));
 
-export const messagesRelations: any = relations(messages, ({ one }) => ({
+export const messagesRelations: any = relations(messages, ({ one, many }) => ({
   user: one(users, {
     fields: [messages.userId],
     references: [users.id],
@@ -412,6 +621,74 @@ export const messagesRelations: any = relations(messages, ({ one }) => ({
   campaign: one(campaigns, {
     fields: [messages.campaignId],
     references: [campaigns.id],
+  }),
+  messageVariants: many(messageVariants),
+  performanceMetrics: many(messagePerformanceMetrics),
+  effectivenessScores: many(messageEffectivenessScores),
+}));
+
+// Message optimization relations
+export const messageABTestsRelations = relations(messageABTests, ({ one, many }) => ({
+  user: one(users, {
+    fields: [messageABTests.userId],
+    references: [users.id],
+  }),
+  campaign: one(campaigns, {
+    fields: [messageABTests.campaignId],
+    references: [campaigns.id],
+  }),
+  variants: many(messageVariants),
+}));
+
+export const messageVariantsRelations = relations(messageVariants, ({ one, many }) => ({
+  test: one(messageABTests, {
+    fields: [messageVariants.testId],
+    references: [messageABTests.id],
+  }),
+  message: one(messages, {
+    fields: [messageVariants.messageId],
+    references: [messages.id],
+  }),
+  performanceMetrics: many(messagePerformanceMetrics),
+}));
+
+export const messagePerformanceMetricsRelations = relations(messagePerformanceMetrics, ({ one }) => ({
+  message: one(messages, {
+    fields: [messagePerformanceMetrics.messageId],
+    references: [messages.id],
+  }),
+  user: one(users, {
+    fields: [messagePerformanceMetrics.userId],
+    references: [users.id],
+  }),
+  variant: one(messageVariants, {
+    fields: [messagePerformanceMetrics.variantId],
+    references: [messageVariants.id],
+  }),
+}));
+
+export const messageOptimizationRulesRelations = relations(messageOptimizationRules, ({ one }) => ({
+  user: one(users, {
+    fields: [messageOptimizationRules.userId],
+    references: [users.id],
+  }),
+}));
+
+export const messageEffectivenessScoresRelations = relations(messageEffectivenessScores, ({ one }) => ({
+  message: one(messages, {
+    fields: [messageEffectivenessScores.messageId],
+    references: [messages.id],
+  }),
+  user: one(users, {
+    fields: [messageEffectivenessScores.userId],
+    references: [users.id],
+  }),
+}));
+
+export const messageOptimizationInsightsRelations = relations(messageOptimizationInsights, ({ one }) => ({
+  user: one(users, {
+    fields: [messageOptimizationInsights.userId],
+    references: [users.id],
   }),
 }));
 
