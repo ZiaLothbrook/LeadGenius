@@ -334,7 +334,9 @@ export class ApiRateLimiter {
         action?: string;
       }> = [];
 
-      for (const [apiName, config] of this.apiConfigs.entries()) {
+      // Convert Map entries to array to avoid downlevelIteration requirement
+      const apiEntries = Array.from(this.apiConfigs.entries());
+      for (const [apiName, config] of apiEntries) {
         const metrics = await this.getCostMetrics(userId, apiName);
 
         // Budget utilization warnings

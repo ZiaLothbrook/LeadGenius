@@ -6,7 +6,7 @@ import Redis from 'ioredis';
  */
 export class RedisClient {
   private static instance: RedisClient;
-  private client: Redis;
+  private client!: Redis; // Use definite assignment assertion
   private isConnected: boolean = false;
   private connectionRetries: number = 0;
   private maxRetries: number = 5;
@@ -32,17 +32,12 @@ export class RedisClient {
     console.log('🔴 Initializing Redis client...');
 
     this.client = new Redis(redisUrl, {
-      retryDelayOnFailover: 100,
       enableReadyCheck: true,
-      maxRetriesPerRequest: 3,
+      maxRetriesPerRequest: null,
       lazyConnect: true,
       keepAlive: 30000,
       connectTimeout: 10000,
       commandTimeout: 5000,
-      // Reconnection settings
-      retryConnectOnFailover: true,
-      maxRetriesPerRequest: null,
-      retryDelayOnFailover: 100,
       enableOfflineQueue: false,
     });
 
@@ -74,7 +69,7 @@ export class RedisClient {
       this.isConnected = false;
     });
 
-    this.client.on('reconnecting', (ms) => {
+    this.client.on('reconnecting', (ms: number) => {
       console.log(`🔄 Redis reconnecting in ${ms}ms...`);
     });
 
