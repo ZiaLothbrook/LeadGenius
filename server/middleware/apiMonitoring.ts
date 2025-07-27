@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import * as os from 'os';
 import { performance } from 'perf_hooks';
 
 /**
@@ -182,7 +183,7 @@ export class ApiMonitoring {
         system: cpuUsage.system
       },
       uptime: Math.round(process.uptime()),
-      loadAverage: process.platform !== 'win32' ? require('os').loadavg() : [0, 0, 0]
+      loadAverage: process.platform !== 'win32' ? os.loadavg() : [0, 0, 0]
     };
   }
 

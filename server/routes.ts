@@ -20,6 +20,19 @@ import { apiGateway } from "./middleware/apiGateway";
 import { apiDocumentation } from "./middleware/apiDocumentation";
 import { apiMonitoring } from "./middleware/apiMonitoring";
 import { setupApiGatewayRoutes } from "./routes/apiGatewayRoutes";
+import { setupCacheRoutes } from "./routes/cacheRoutes";
+import { redisClient } from "./services/redisClient";
+import { cacheService } from "./services/cacheService";
+import { sessionCacheService } from "./services/sessionCacheService";
+import { prospectCacheService } from "./services/prospectCacheService";
+import {
+  cacheResponse,
+  invalidateCache,
+  invalidateUserCache,
+  cacheProspectData,
+  cacheSearchResults,
+  cacheApiResponse
+} from "./middleware/cacheMiddleware";
 import {
   insertProspectSchema,
   insertCampaignSchema,
@@ -83,6 +96,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize API documentation
   apiDocumentation.initializeDocumentation(app);
   
+  // Initialize Redis cache system
+  console.log('🔴 Setting up Redis caching system...');
+  await redisClient.healthCheck();
+  console.log('✅ Redis cache system initialized');
+  
   // Auth middleware - setup both Replit and local auth
   await setupAuth(app);
   await setupLocalAuth(app);
@@ -124,8 +142,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
 
-  // Bulk Message Generation API
-  app.post('/api/messages/generate-bulk', isAuthenticatedLocal, async (req: any, res) => {
+  // Bulk Message Generation API with cache invalidation
+  app.post('/api/messages/generate-bulk', 
+    isAuthenticatedLocal, 
+    invalidateUserCache(),
+    async (req: any, res) => {
     try {
       console.log("📧 Bulk message generation request for", req.body.prospects?.length, "prospects");
       
@@ -146,8 +167,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Dashboard stats
-  app.get('/api/dashboard/stats', isAuthenticatedLocal, async (req: any, res) => {
+  // Dashboard stats with caching
+  app.get('/api/dashboard/stats', 
+    isAuthenticatedLocal, 
+    cacheApiResponse(300), // 5 minutes cache
+    async (req: any, res) => {
     try {
       const userId = req.user.id || req.user.claims?.sub;
       const stats = await storage.getDashboardStats(userId);
@@ -158,8 +182,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Prospect routes
-  app.post('/api/prospects/search', isAuthenticatedLocal, async (req: any, res) => {
+  // Prospect routes with caching
+  app.post('/api/prospects/search', 
+    isAuthenticatedLocal, 
+    cacheSearchResults(),
+    async (req: any, res) => {
     try {
       console.log('🔍 Raw request body:', JSON.stringify(req.body, null, 2));
       
@@ -258,7 +285,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/prospects/:id', isAuthenticatedLocal, async (req: any, res) => {
+  app.get('/api/prospects/:id', 
+    isAuthenticatedLocal, 
+    cacheProspectData(),
+    async (req: any, res) => {
     try {
       const prospect = await storage.getProspect(req.params.id);
       if (!prospect) {
@@ -283,7 +313,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/prospects/:id', isAuthenticatedLocal, async (req: any, res) => {
+  app.put('/api/prospects/:id', 
+    isAuthenticatedLocal, 
+    invalidateUserCache(),
+    async (req: any, res) => {
     try {
       const prospect = await storage.updateProspect(req.params.id, req.body);
       res.json(prospect);
@@ -293,7 +326,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/prospects/:id', isAuthenticatedLocal, async (req: any, res) => {
+  app.delete('/api/prospects/:id', 
+    isAuthenticatedLocal, 
+    invalidateUserCache(),
+    async (req: any, res) => {
     try {
       await storage.deleteProspect(req.params.id);
       res.json({ message: "Prospect deleted successfully" });
@@ -303,8 +339,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // HIGHEST PRIORITY: AI-Powered Intelligent Prospect Search API
-  app.post('/api/prospects/search', isAuthenticatedLocal, async (req: any, res) => {
+  // HIGHEST PRIORITY: AI-Powered Intelligent Prospect Search API with caching
+  app.post('/api/prospects/search-ai', 
+    isAuthenticatedLocal, 
+    cacheSearchResults(),
+    async (req: any, res) => {
     try {
       console.log("🔍 AI-powered prospect search request:", req.body);
       
@@ -1963,6 +2002,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Setup API Gateway management routes
   setupApiGatewayRoutes(app);
+
+  // Setup cache management routes
+  setupCacheRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;
