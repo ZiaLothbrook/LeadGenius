@@ -2085,6 +2085,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/deliverability', isAuthenticatedLocal, deliverabilityRoutes);
   console.log('📧 Deliverability monitoring routes configured');
 
+  // CARD-009: Campaign Creation Routes
+  try {
+    const { registerCampaignCreationRoutes } = require('./routes/campaignCreationRoutes');
+    registerCampaignCreationRoutes(app);
+    console.log('🚀 Campaign creation routes configured');
+  } catch (error) {
+    console.error('❌ Failed to register campaign creation routes:', error);
+  }
+
   const httpServer = createServer(app);
   return httpServer;
 }
