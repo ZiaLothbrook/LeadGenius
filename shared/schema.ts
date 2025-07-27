@@ -868,6 +868,147 @@ export type ProspectSearch = typeof prospectSearches.$inferSelect;
 export type InsertProspectSearch = typeof prospectSearches.$inferInsert;
 export type DiscoveredProspect = typeof discoveredProspects.$inferSelect;
 export type InsertDiscoveredProspect = typeof discoveredProspects.$inferInsert;
+
+// Campaign Scheduling Tables (CARD-033)
+export const campaignSchedules = pgTable("campaign_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: varchar("campaign_id").notNull().references(() => campaigns.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  scheduleName: varchar("schedule_name").notNull(),
+  scheduleType: varchar("schedule_type", { enum: ["immediate", "scheduled", "recurring", "optimal"] }).notNull(),
+  
+  // Timezone and timing
+  timezone: varchar("timezone").notNull().default("UTC"),
+  scheduledAt: timestamp("scheduled_at"),
+  optimalSendTime: timestamp("optimal_send_time"),
+  
+  // Recurring schedule options
+  recurringPattern: varchar("recurring_pattern", { enum: ["daily", "weekly", "monthly", "custom"] }),
+  recurringConfig: jsonb("recurring_config"), // Days of week, intervals, etc.
+  
+  // Send window constraints
+  sendWindowStart: varchar("send_window_start"), // HH:MM format
+  sendWindowEnd: varchar("send_window_end"), // HH:MM format
+  allowWeekends: boolean("allow_weekends").default(false),
+  
+  // Optimization settings
+  enableOptimalTiming: boolean("enable_optimal_timing").default(true),
+  optimizationGoal: varchar("optimization_goal", { enum: ["open_rate", "click_rate", "response_rate", "conversion_rate"] }).default("open_rate"),
+  
+  // Status and control
+  status: varchar("status", { enum: ["draft", "active", "paused", "completed", "cancelled"] }).default("draft"),
+  priority: integer("priority").default(5), // 1-10, higher = more important
+  
+  // Conflict resolution
+  conflictResolution: varchar("conflict_resolution", { enum: ["queue", "override", "skip"] }).default("queue"),
+  maxDailyMessages: integer("max_daily_messages").default(100),
+  minMessageInterval: integer("min_message_interval").default(60), // minutes
+  
+  // Tracking
+  totalScheduled: integer("total_scheduled").default(0),
+  totalSent: integer("total_sent").default(0),
+  lastSentAt: timestamp("last_sent_at"),
+  nextSendAt: timestamp("next_send_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const scheduledMessages = pgTable("scheduled_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scheduleId: varchar("schedule_id").notNull().references(() => campaignSchedules.id, { onDelete: "cascade" }),
+  messageId: varchar("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+  prospectId: varchar("prospect_id").notNull().references(() => prospects.id, { onDelete: "cascade" }),
+  
+  // Scheduling details
+  originalScheduledAt: timestamp("original_scheduled_at").notNull(),
+  optimizedScheduledAt: timestamp("optimized_scheduled_at"),
+  actualSentAt: timestamp("actual_sent_at"),
+  
+  // Status tracking
+  status: varchar("status", { enum: ["pending", "optimized", "sending", "sent", "failed", "cancelled", "deferred"] }).default("pending"),
+  
+  // Optimization data
+  timezoneOffset: integer("timezone_offset"), // minutes from UTC
+  optimalSendScore: decimal("optimal_send_score", { precision: 5, scale: 2 }), // 0-100
+  optimizationReason: text("optimization_reason"),
+  
+  // Conflict handling
+  conflictsWith: varchar("conflicts_with"), // Reference to other scheduled message
+  conflictResolved: boolean("conflict_resolved").default(false),
+  deferredUntil: timestamp("deferred_until"),
+  
+  // Delivery tracking
+  deliveryAttempts: integer("delivery_attempts").default(0),
+  lastDeliveryAttempt: timestamp("last_delivery_attempt"),
+  deliveryError: text("delivery_error"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const timingOptimizations = pgTable("timing_optimizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  prospectId: varchar("prospect_id").references(() => prospects.id),
+  
+  // Timing analysis
+  optimalHour: integer("optimal_hour"), // 0-23
+  optimalDayOfWeek: integer("optimal_day_of_week"), // 0-6 (Sunday = 0)
+  optimalSendTime: timestamp("optimal_send_time"),
+  
+  // Performance data
+  openRateByHour: jsonb("open_rate_by_hour"), // Hour -> rate mapping
+  clickRateByHour: jsonb("click_rate_by_hour"),
+  responseRateByHour: jsonb("response_rate_by_hour"),
+  
+  openRateByDay: jsonb("open_rate_by_day"), // Day -> rate mapping
+  clickRateByDay: jsonb("click_rate_by_day"),
+  responseRateByDay: jsonb("response_rate_by_day"),
+  
+  // AI insights
+  aiRecommendations: jsonb("ai_recommendations"),
+  confidenceScore: decimal("confidence_score", { precision: 5, scale: 2 }), // 0-100
+  
+  // Data quality
+  sampleSize: integer("sample_size").default(0),
+  lastAnalyzedAt: timestamp("last_analyzed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const scheduleConflicts = pgTable("schedule_conflicts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  primaryScheduleId: varchar("primary_schedule_id").notNull().references(() => campaignSchedules.id),
+  conflictingScheduleId: varchar("conflicting_schedule_id").notNull().references(() => campaignSchedules.id),
+  
+  // Conflict details
+  conflictType: varchar("conflict_type", { enum: ["timing", "capacity", "prospect_overlap", "rate_limit"] }).notNull(),
+  conflictDescription: text("conflict_description"),
+  
+  // Resolution
+  resolutionStrategy: varchar("resolution_strategy", { enum: ["defer", "reschedule", "cancel", "merge"] }),
+  resolutionApplied: boolean("resolution_applied").default(false),
+  resolvedAt: timestamp("resolved_at"),
+  
+  // Impact assessment
+  impactScore: decimal("impact_score", { precision: 5, scale: 2 }), // 0-100
+  affectedMessages: integer("affected_messages").default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type InsertCampaignSchedule = typeof campaignSchedules.$inferInsert;
+export type SelectCampaignSchedule = typeof campaignSchedules.$inferSelect;
+export type InsertScheduledMessage = typeof scheduledMessages.$inferInsert;
+export type SelectScheduledMessage = typeof scheduledMessages.$inferSelect;
+export type InsertTimingOptimization = typeof timingOptimizations.$inferInsert;
+export type SelectTimingOptimization = typeof timingOptimizations.$inferSelect;
+export type InsertScheduleConflict = typeof scheduleConflicts.$inferInsert;
+export type SelectScheduleConflict = typeof scheduleConflicts.$inferSelect;
 export type InsertProspect = z.infer<typeof insertProspectSchema>;
 export type Prospect = typeof prospects.$inferSelect;
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
