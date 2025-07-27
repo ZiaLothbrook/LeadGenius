@@ -1,7 +1,7 @@
 import { cacheService } from './cacheService';
 import session from 'express-session';
 import { redisClient } from './redisClient';
-import * as connectRedis from 'connect-redis';
+import * as ConnectRedis from 'connect-redis';
 
 /**
  * Session Cache Service
@@ -27,9 +27,7 @@ export class SessionCacheService {
    */
   private initializeRedisStore(): void {
     try {
-      const RedisStore = (connectRedis as any).default 
-        ? (connectRedis as any).default(session) 
-        : (connectRedis as any)(session);
+      const RedisStore = (ConnectRedis as any).default(session);
       
       this.redisStore = new RedisStore({
         client: redisClient.getClient(),
