@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { searchAnalyticsService } from "./searchAnalyticsService";
 
 // Search filters schema
 export const searchFiltersSchema = z.object({
@@ -179,13 +180,14 @@ const MOCK_PROSPECTS_DATABASE = [
 ];
 
 export class ProspectSearchService {
-  async searchProspects(filters: SearchFilters): Promise<{
+  async searchProspects(filters: SearchFilters, userId?: string): Promise<{
     prospects: any[];
     total: number;
     page: number;
     totalPages: number;
     hasMore: boolean;
   }> {
+    const startTime = Date.now();
     // Start with all prospects
     let filteredProspects = [...MOCK_PROSPECTS_DATABASE];
 
@@ -260,13 +262,56 @@ export class ProspectSearchService {
       lastUpdated: new Date().toISOString(),
     }));
 
-    return {
+    const results = {
       prospects: prospectsWithIds,
       total,
       page: filters.page,
       totalPages,
       hasMore: filters.page < totalPages,
     };
+
+    // Track search analytics if userId is provided
+    if (userId) {
+      try {
+        const responseTime = Date.now() - startTime;
+        
+        // Track the search query
+        const searchQuery = await searchAnalyticsService.trackSearchQuery(userId, {
+          query: filters.keywords || "",
+          filters: {
+            industry: filters.industry,
+            companySize: filters.companySize,
+            location: filters.location,
+            jobTitles: filters.jobTitles || [],
+            technologies: filters.technologies || [],
+          },
+          resultsCount: total,
+          responseTime,
+          source: "internal",
+          userAgent: "ProspectSearchService",
+        });
+
+        // Track search results if we have results
+        if (prospectsWithIds.length > 0) {
+          const searchResults = prospectsWithIds.map((prospect, index) => ({
+            queryId: searchQuery.id,
+            prospectId: prospect.id,
+            rank: index + 1,
+            score: prospect.score,
+            source: prospect.source,
+            dataQuality: prospect.dataQuality,
+            clicked: false,
+          }));
+
+          await searchAnalyticsService.trackSearchResults(userId, searchResults);
+        }
+      } catch (analyticsError) {
+        console.error("Error tracking search analytics:", analyticsError);
+        // Don't fail the search if analytics tracking fails
+      }
+    }
+
+    return results;
   }
 
   // Get available filter options for frontend

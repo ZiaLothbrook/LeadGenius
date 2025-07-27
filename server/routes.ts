@@ -22,6 +22,7 @@ import { apiMonitoring } from "./middleware/apiMonitoring";
 import { setupApiGatewayRoutes } from "./routes/apiGatewayRoutes";
 import { setupCacheRoutes } from "./routes/cacheRoutes";
 import { setupEmailVerificationRoutes } from "./routes/emailVerificationRoutes";
+import searchAnalyticsRoutes from "./routes/searchAnalyticsRoutes";
 import { redisClient } from "./services/redisClient";
 import { cacheService } from "./services/cacheService";
 import { sessionCacheService } from "./services/sessionCacheService";
@@ -2009,6 +2010,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Setup email verification routes (CARD-013)
   setupEmailVerificationRoutes(app);
+
+  // Setup search analytics routes (CARD-025)
+  app.use('/api/search-analytics', isAuthenticatedLocal, searchAnalyticsRoutes);
+  console.log("🔧 Search analytics routes configured");
 
   const httpServer = createServer(app);
   return httpServer;

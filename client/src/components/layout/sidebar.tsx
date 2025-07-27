@@ -60,6 +60,11 @@ const navItems = [
     icon: PieChart,
   },
   {
+    name: "Search Analytics",
+    href: "/search-analytics",
+    icon: BarChart3,
+  },
+  {
     name: "API Keys",
     href: "/apis",
     icon: Key,
